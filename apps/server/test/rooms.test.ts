@@ -581,9 +581,9 @@ describe("coins at the table", () => {
   it("the wallet endpoints read the balance and pay the daily bonus once", async () => {
     colyseus.sdk.auth.token = "guest-wallet";
     const first = await colyseus.sdk.http.get("/wallet");
-    assert.deepStrictEqual(first.data, { balance: 1000, dailyBonusAvailable: true, dailyBonusCoins: 200 });
+    assert.deepStrictEqual(first.data, { balance: 1000, dailyBonusAvailable: true, dailyBonusCoins: 200, streakDay: 1 });
     const claimed = await colyseus.sdk.http.post("/wallet/daily", {});
-    assert.deepStrictEqual(claimed.data, { balance: 1200, dailyBonusAvailable: false, dailyBonusCoins: 200 });
+    assert.deepStrictEqual(claimed.data, { balance: 1200, dailyBonusAvailable: false, dailyBonusCoins: 200, streakDay: 1 });
     await assert.rejects(colyseus.sdk.http.post("/wallet/daily", {}), /already claimed|409/i);
     colyseus.sdk.auth.token = "";
     await assert.rejects(colyseus.sdk.http.get("/wallet"), /401|sign in/i);

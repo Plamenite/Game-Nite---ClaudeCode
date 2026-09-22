@@ -1,5 +1,5 @@
 import { createEndpoint } from "colyseus";
-import { DAILY_BONUS_COINS, WALLET_ROUTES, type WalletSnapshot } from "@gamenite/game-rules";
+import { WALLET_ROUTES, type WalletSnapshot } from "@gamenite/game-rules";
 import { authenticate, type PlayerAuth } from "./auth.js";
 import { LedgerError, getLedger } from "./ledger.js";
 
@@ -17,7 +17,8 @@ async function playerFromHeader(header: string | null): Promise<PlayerAuth | nul
 async function snapshot(player: PlayerAuth): Promise<WalletSnapshot> {
   const ledger = getLedger();
   const balance = await ledger.ensureProfile(player.userId, "", player.guest);
-  return { balance, dailyBonusAvailable: !(await ledger.dailyBonusClaimed(player.userId)), dailyBonusCoins: DAILY_BONUS_COINS };
+  const daily = await ledger.dailyBonus(player.userId);
+  return { balance, dailyBonusAvailable: !daily.claimedToday, dailyBonusCoins: daily.coins, streakDay: daily.streakDay };
 }
 
 /**

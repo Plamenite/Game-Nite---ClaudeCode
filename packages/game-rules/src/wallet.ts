@@ -13,6 +13,8 @@ export const WALLET_ROUTES = {
 export interface WalletSnapshot {
   balance: number;
   dailyBonusAvailable: boolean;
-  /** How many coins the daily bonus pays, for the button label. */
+  /** What today's daily bonus pays (or paid), for the button label. */
   dailyBonusCoins: number;
+  /** Day number of today's login streak; grows every consecutive day, restarts when one is missed. */
+  streakDay: number;
 }

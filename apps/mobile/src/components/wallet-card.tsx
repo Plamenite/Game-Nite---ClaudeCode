@@ -2,14 +2,16 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { DAILY_STREAK_MAX_DAY } from '@gamenite/game-rules';
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useWallet } from '@/hooks/use-wallet';
 
-/** Balance, the daily bonus, and a placeholder for rewarded ads. */
+/** Balance, the daily bonus with its login streak, and a placeholder for rewarded ads. */
 export function WalletCard() {
-  const { wallet, busy, error, refresh, claimDaily, dailyBonusCoins } = useWallet();
+  const { wallet, busy, error, refresh, claimDaily, tomorrowCoins } = useWallet();
 
   // Refresh whenever this screen comes into view (for example after a table).
   useFocusEffect(
@@ -33,10 +35,15 @@ export function WalletCard() {
       ) : null}
       <View style={styles.actions}>
         <Action
-          label={wallet?.dailyBonusAvailable ? `Claim daily bonus +${dailyBonusCoins}` : 'Daily bonus claimed'}
+          label={wallet?.dailyBonusAvailable ? `Claim daily bonus +${wallet.dailyBonusCoins}` : 'Daily bonus claimed'}
           disabled={busy || !wallet?.dailyBonusAvailable}
           onPress={() => void claimDaily()}
         />
+        {wallet ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {streakLine(wallet.streakDay, wallet.dailyBonusAvailable, tomorrowCoins)}
+          </ThemedText>
+        ) : null}
         <Action label="Watch an ad for +100 (coming soon)" disabled onPress={() => undefined} />
       </View>
       <ThemedText type="small" themeColor="textSecondary">
@@ -44,6 +51,15 @@ export function WalletCard() {
       </ThemedText>
     </ThemedView>
   );
+}
+
+/** One line under the bonus button: where the streak stands and what tomorrow pays. */
+function streakLine(streakDay: number, available: boolean, tomorrowCoins: number): string {
+  const tomorrow = `Come back tomorrow for +${tomorrowCoins}${streakDay + 1 >= DAILY_STREAK_MAX_DAY ? ' (the max)' : ''}.`;
+  if (available) {
+    return streakDay <= 1 ? `Day 1 of your streak. Claim every day and the bonus grows. ${tomorrow}` : `Day ${streakDay} streak. ${tomorrow}`;
+  }
+  return `Day ${streakDay} streak claimed. ${tomorrow} Miss a day and it starts over.`;
 }
 
 function Action({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {

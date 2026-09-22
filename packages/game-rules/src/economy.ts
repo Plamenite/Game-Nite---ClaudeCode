@@ -8,9 +8,55 @@
  */
 
 export const STARTING_COINS = 1000;
+/** Day 1 of a login streak. */
 export const DAILY_BONUS_COINS = 200;
+/** Each consecutive day adds this much, up to DAILY_STREAK_MAX_DAY. */
+export const DAILY_STREAK_STEP_COINS = 50;
+/** From this day on the bonus stays at its maximum (500). */
+export const DAILY_STREAK_MAX_DAY = 7;
 export const AD_REWARD_COINS = 100;
 export const MAX_AD_REWARDS_PER_DAY = 5;
+
+/**
+ * What the daily bonus pays on day `day` of a streak: 200, 250, ... 500,
+ * then 500 for as long as the streak lasts. Missing a day restarts at day 1.
+ */
+export function dailyBonusForDay(day: number): number {
+  const capped = Math.min(Math.max(Math.floor(day), 1), DAILY_STREAK_MAX_DAY);
+  return DAILY_BONUS_COINS + DAILY_STREAK_STEP_COINS * (capped - 1);
+}
+
+/** Calendar day in UTC as YYYY-MM-DD. Streaks count UTC days, like the ledger. */
+export function utcDay(date: Date = new Date()): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** The UTC day before a YYYY-MM-DD day. */
+export function previousUtcDay(day: string): string {
+  return utcDay(new Date(Date.parse(`${day}T00:00:00Z`) - 24 * 60 * 60 * 1000));
+}
+
+export interface DailyBonusStatus {
+  /** Already claimed today, so the button waits for tomorrow. */
+  claimedToday: boolean;
+  /** Day number of today's claim: continues yesterday's streak or restarts at 1. */
+  streakDay: number;
+  /** What today's claim pays (or paid). */
+  coins: number;
+}
+
+/**
+ * Where a player's streak stands today, given their last claim. Pure, so
+ * the server, the database rules and the phone all agree.
+ */
+export function dailyBonusStatus(lastClaimDay: string | null, lastStreakDay: number, today: string = utcDay()): DailyBonusStatus {
+  if (lastClaimDay === today) {
+    const streakDay = Math.max(lastStreakDay, 1);
+    return { claimedToday: true, streakDay, coins: dailyBonusForDay(streakDay) };
+  }
+  const streakDay = lastClaimDay === previousUtcDay(today) ? Math.max(lastStreakDay, 0) + 1 : 1;
+  return { claimedToday: false, streakDay, coins: dailyBonusForDay(streakDay) };
+}
 
 /** Table entry tiers. 0 is free practice: nothing is charged or awarded. */
 export const TABLE_ENTRY_TIERS = [0, 500, 2000, 10000] as const;

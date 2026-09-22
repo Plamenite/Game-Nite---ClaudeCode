@@ -17,6 +17,29 @@ describe("MemoryLedger (development ledger with the database's rules)", () => {
     await rejects(l.rewardAd("u2", "ad-1"), /already rewarded/);
   });
 
+  it("the daily bonus follows a login streak: grows each day, caps at seven, restarts after a gap", async () => {
+    let now = Date.parse("2026-09-22T12:00:00Z");
+    const l = new MemoryLedger(() => new Date(now));
+    const day = 24 * 60 * 60 * 1000;
+    await l.ensureProfile("u1", "Zain", false);
+    assert.deepStrictEqual(await l.dailyBonus("u1"), { claimedToday: false, streakDay: 1, coins: 200 });
+    assert.strictEqual(await l.claimDailyBonus("u1"), 1200);
+    assert.deepStrictEqual(await l.dailyBonus("u1"), { claimedToday: true, streakDay: 1, coins: 200 });
+    await rejects(l.claimDailyBonus("u1"), /already claimed/);
+
+    now += day; // day 2 pays 250
+    assert.deepStrictEqual(await l.dailyBonus("u1"), { claimedToday: false, streakDay: 2, coins: 250 });
+    assert.strictEqual(await l.claimDailyBonus("u1"), 1450);
+
+    for (let d = 3; d <= 8; d++) { now += day; await l.claimDailyBonus("u1"); } // 300+350+400+450+500+500
+    assert.strictEqual(await l.getBalance("u1"), 1450 + 2500);
+    assert.deepStrictEqual(await l.dailyBonus("u1"), { claimedToday: true, streakDay: 8, coins: 500 });
+
+    now += 2 * day; // missed a day: back to day 1
+    assert.deepStrictEqual(await l.dailyBonus("u1"), { claimedToday: false, streakDay: 1, coins: 200 });
+    assert.strictEqual(await l.claimDailyBonus("u1"), 3950 + 200);
+  });
+
   it("charges entries once, refuses overdrafts, settles once", async () => {
     const l = new MemoryLedger();
     await l.ensureProfile("a", "A", true);

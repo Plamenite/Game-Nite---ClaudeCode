@@ -1,10 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AD_REWARD_COINS,
-  DAILY_BONUS_COINS,
   MAX_AD_REWARDS_PER_DAY,
   STARTING_COINS,
+  dailyBonusStatus,
   isTableEntry,
+  utcDay,
+  type DailyBonusStatus,
   type LedgerMove,
 } from "@gamenite/game-rules";
 
@@ -19,7 +21,9 @@ export interface Ledger {
   /** First sight of a player: profile plus starting coins, once. Returns the balance. */
   ensureProfile(userId: string, displayName: string, isGuest: boolean): Promise<number>;
   getBalance(userId: string): Promise<number>;
-  dailyBonusClaimed(userId: string): Promise<boolean>;
+  /** Where today's login streak stands: claimed yet, which day, how many coins. */
+  dailyBonus(userId: string): Promise<DailyBonusStatus>;
+  /** Pays today's streak amount once per UTC day. Returns the balance. */
   claimDailyBonus(userId: string): Promise<number>;
   rewardAd(userId: string, adId: string): Promise<number>;
   /** Charges the entry; throws LedgerError('not enough coins') when unaffordable. Idempotent per table. */
@@ -30,13 +34,19 @@ export interface Ledger {
 
 export class LedgerError extends Error {}
 
-const utcDay = (d = new Date()) => d.toISOString().slice(0, 10);
-
 /** In-memory ledger with exactly the database's rules. Never for production. */
 export class MemoryLedger implements Ledger {
   private balances = new Map<string, number>();
   private keys = new Set<string>();
   private adCounts = new Map<string, number>(); // `${user}:${day}` -> count
+  private streaks = new Map<string, { lastClaimDay: string; streakDay: number }>();
+
+  /** Tests pass a clock to walk through days. */
+  constructor(private readonly clock: () => Date = () => new Date()) {}
+
+  private today() {
+    return utcDay(this.clock());
+  }
 
   private apply(userId: string, amount: number, key: string): boolean {
     if (this.keys.has(key)) return false;
@@ -56,19 +66,23 @@ export class MemoryLedger implements Ledger {
     return this.balances.get(userId) ?? 0;
   }
 
-  async dailyBonusClaimed(userId: string): Promise<boolean> {
-    return this.keys.has(`daily:${userId}:${utcDay()}`);
+  async dailyBonus(userId: string): Promise<DailyBonusStatus> {
+    const last = this.streaks.get(userId);
+    return dailyBonusStatus(last?.lastClaimDay ?? null, last?.streakDay ?? 0, this.today());
   }
 
   async claimDailyBonus(userId: string): Promise<number> {
-    if (!this.apply(userId, DAILY_BONUS_COINS, `daily:${userId}:${utcDay()}`)) {
+    const today = this.today();
+    const status = await this.dailyBonus(userId);
+    if (status.claimedToday || !this.apply(userId, status.coins, `daily:${userId}:${today}`)) {
       throw new LedgerError("daily bonus already claimed today");
     }
+    this.streaks.set(userId, { lastClaimDay: today, streakDay: status.streakDay });
     return this.balances.get(userId)!;
   }
 
   async rewardAd(userId: string, adId: string): Promise<number> {
-    const dayKey = `${userId}:${utcDay()}`;
+    const dayKey = `${userId}:${this.today()}`;
     if ((this.adCounts.get(dayKey) ?? 0) >= MAX_AD_REWARDS_PER_DAY) throw new LedgerError("daily ad reward limit reached");
     if (!this.apply(userId, AD_REWARD_COINS, `ad:${adId}`)) throw new LedgerError("this ad was already rewarded");
     this.adCounts.set(dayKey, (this.adCounts.get(dayKey) ?? 0) + 1);
@@ -109,8 +123,12 @@ export class SupabaseLedger implements Ledger {
   getBalance(userId: string) {
     return this.rpc<number>("get_balance", { p_user: userId }).then(Number);
   }
-  dailyBonusClaimed(userId: string) {
-    return this.rpc<boolean>("daily_bonus_claimed", { p_user: userId }).then(Boolean);
+  dailyBonus(userId: string) {
+    return this.rpc<{ claimed_today: boolean; streak_day: number; coins: number }>("daily_bonus_status", { p_user: userId }).then((s) => ({
+      claimedToday: Boolean(s.claimed_today),
+      streakDay: Number(s.streak_day),
+      coins: Number(s.coins),
+    }));
   }
   claimDailyBonus(userId: string) {
     return this.rpc<number>("claim_daily_bonus", { p_user: userId }).then(Number);

@@ -23,9 +23,9 @@ iOS-first mobile multiplayer board/card game platform.
 ### Social, lobby, economy
 - PUBG-style party lobby (gather, ready, launch); voice carries lobby → match.
 - Economy (DECIDED, `docs/ECONOMY.md`, modelled on Ludo Star): NO blockchain
-  or real-money payouts. Start 1,000; daily bonus 200; ad 100 (max 5/day);
-  tables free/500/2,000/10,000; winners split losers' entries minus a 10%
-  fee. Revenue: rewarded + interstitial ads, App Store IAP.
+  or real-money payouts. Start 1,000; daily bonus is a login streak (200,
+  +50/day, 500 from day 7, restart after a miss); ad 100 (max 5/day); tables
+  free/500/2,000/10,000; winners split losers' entries minus a flat 10% fee.
 
 ## 3. Apple App Store compliance (non-negotiable)
 - Position and document the product as a **casual social game**, not

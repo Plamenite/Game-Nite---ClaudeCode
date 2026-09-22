@@ -4,11 +4,16 @@ import { test } from 'node:test';
 import {
   AD_REWARD_COINS,
   DAILY_BONUS_COINS,
+  DAILY_STREAK_MAX_DAY,
+  DAILY_STREAK_STEP_COINS,
   MAX_AD_REWARDS_PER_DAY,
   STARTING_COINS,
   TABLE_ENTRY_TIERS,
+  dailyBonusForDay,
+  dailyBonusStatus,
   isTableEntry,
   netForPlayer,
+  previousUtcDay,
   settleTable,
 } from '../src/economy.js';
 
@@ -93,4 +98,20 @@ test('a draw refunds everyone; free practice moves nothing', () => {
   ]);
   assert.deepEqual(settleTable(0, seats, 0).moves, []);
   assert.equal(netForPlayer(0, settleTable(0, seats, 0), 'a'), 0);
+});
+
+test('the daily bonus grows with a login streak and caps at day seven', () => {
+  assert.equal(DAILY_STREAK_STEP_COINS, 50);
+  assert.equal(DAILY_STREAK_MAX_DAY, 7);
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 30].map(dailyBonusForDay), [200, 250, 300, 350, 400, 450, 500, 500, 500]);
+  assert.equal(dailyBonusForDay(0), 200, 'never below day one');
+});
+
+test('a streak continues from yesterday, waits when claimed today, and restarts after a missed day', () => {
+  assert.equal(previousUtcDay('2026-03-01'), '2026-02-28');
+  assert.deepEqual(dailyBonusStatus(null, 0, '2026-09-22'), { claimedToday: false, streakDay: 1, coins: 200 });
+  assert.deepEqual(dailyBonusStatus('2026-09-21', 3, '2026-09-22'), { claimedToday: false, streakDay: 4, coins: 350 });
+  assert.deepEqual(dailyBonusStatus('2026-09-22', 4, '2026-09-22'), { claimedToday: true, streakDay: 4, coins: 350 });
+  assert.deepEqual(dailyBonusStatus('2026-09-20', 6, '2026-09-22'), { claimedToday: false, streakDay: 1, coins: 200 }, 'missed a day');
+  assert.deepEqual(dailyBonusStatus('2026-09-21', 9, '2026-09-22'), { claimedToday: false, streakDay: 10, coins: 500 }, 'long streaks keep counting at the cap');
 });

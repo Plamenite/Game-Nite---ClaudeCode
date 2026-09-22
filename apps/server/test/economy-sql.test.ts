@@ -51,10 +51,39 @@ describe("economy SQL (embedded Postgres)", function () {
   });
 
   it("the daily bonus can be claimed once per day", async () => {
+    const status = async (user: string) => (await db.query<{ s: Record<string, unknown> }>("select public.daily_bonus_status($1) as s", [user])).rows[0].s;
+    assert.deepStrictEqual(await status(U1), { claimed_today: false, streak_day: 1, coins: 200 });
     await db.query("select public.claim_daily_bonus($1)", [U1]);
     assert.strictEqual(await balance(U1), 1200);
+    assert.deepStrictEqual(await status(U1), { claimed_today: true, streak_day: 1, coins: 200 });
     await rejects(db.query("select public.claim_daily_bonus($1)", [U1]), /already claimed/);
     assert.strictEqual(await balance(U1), 1200);
+    const row = (await db.query<{ ref: string; day: number }>("select ref, daily_streak as day from public.coin_ledger l join public.profiles p on p.id = l.user_id where l.user_id = $1 and kind = 'daily_bonus'", [U1])).rows[0];
+    assert.deepStrictEqual(row, { ref: "day:1", day: 1 });
+  });
+
+  it("the daily bonus grows with a login streak, caps at day seven, and restarts after a missed day", async () => {
+    const status = async (user: string) => (await db.query<{ s: Record<string, unknown> }>("select public.daily_bonus_status($1) as s", [user])).rows[0].s;
+    const pretend = (user: string, daysAgo: number, streak: number) =>
+      db.query("update public.profiles set last_daily_claim = (now() at time zone 'UTC')::date - $2::int, daily_streak = $3 where id = $1", [user, daysAgo, streak]);
+
+    // Claimed yesterday as day 3: today is day 4 and pays 350.
+    await pretend(U2, 1, 3);
+    assert.deepStrictEqual(await status(U2), { claimed_today: false, streak_day: 4, coins: 350 });
+    await db.query("select public.claim_daily_bonus($1)", [U2]);
+    assert.strictEqual(await balance(U2), 1350);
+    assert.deepStrictEqual(await status(U2), { claimed_today: true, streak_day: 4, coins: 350 });
+
+    // Long streaks keep counting but the coins stay at the day-seven amount.
+    await pretend(U1, 1, 9);
+    assert.deepStrictEqual(await status(U1), { claimed_today: false, streak_day: 10, coins: 500 });
+
+    // Missing a day restarts at day 1.
+    await pretend(U1, 2, 9);
+    assert.deepStrictEqual(await status(U1), { claimed_today: false, streak_day: 1, coins: 200 });
+    // Today's key is already in the ledger for U1, so the claim itself still refuses.
+    await rejects(db.query("select public.claim_daily_bonus($1)", [U1]), /already claimed/);
+    await pretend(U1, 0, 1);
   });
 
   it("ad rewards: one per ad id, at most five per day", async () => {
@@ -71,7 +100,7 @@ describe("economy SQL (embedded Postgres)", function () {
     await db.query("select public.charge_table_entry($1, $2, $3)", [U1, "table-1", 500]);
     assert.strictEqual(await balance(U1), 1200);
     await rejects(db.query("select public.charge_table_entry($1, $2, $3)", [U2, "table-1", 2000]), /not enough coins/);
-    assert.strictEqual(await balance(U2), 1000, "a refused charge changes nothing");
+    assert.strictEqual(await balance(U2), 1350, "a refused charge changes nothing");
     await rejects(db.query("select public.charge_table_entry($1, $2, $3)", [U1, "table-x", 750]), /not a table entry tier/);
   });
 
@@ -80,7 +109,7 @@ describe("economy SQL (embedded Postgres)", function () {
     const moves = JSON.stringify([{ user_id: U1, amount: 950, kind: "table_reward" }]);
     await db.query("select public.settle_table($1, $2::jsonb)", ["table-1", moves]);
     assert.strictEqual(await balance(U1), 2150, "entry back plus 450");
-    assert.strictEqual(await balance(U2), 500);
+    assert.strictEqual(await balance(U2), 850);
     await db.query("select public.settle_table($1, $2::jsonb)", ["table-1", moves]);
     assert.strictEqual(await balance(U1), 2150, "settling twice does not pay twice");
 

@@ -19,6 +19,8 @@ create table if not exists public.profiles (
   display_name  text not null default 'Guest',
   avatar_url    text,
   is_guest      boolean not null default true,
+  daily_streak  int not null default 0,             -- day number of the last daily claim
+  last_daily_claim date,                            -- UTC day of that claim
   created_at    timestamptz not null default now()
 );
 
@@ -121,28 +123,64 @@ begin
   return public.get_balance(p_user);
 end $$;
 
--- Once per UTC day.
+-- Login streak: 200 on day 1, +50 per consecutive UTC day, 500 from day 7
+-- on. Miss a day and it restarts at day 1. Same arithmetic as
+-- dailyBonusForDay() in packages/game-rules/src/economy.ts.
+create or replace function public.daily_bonus_coins(p_day int) returns bigint
+language sql immutable as $$
+  select 200 + 50 * (least(greatest(p_day, 1), 7) - 1);
+$$;
+
+-- Which streak day today's claim is, given the last claim.
+create or replace function public.daily_streak_day(p_last_claim date, p_last_streak int, p_today date) returns int
+language sql immutable as $$
+  select case
+    when p_last_claim = p_today then greatest(p_last_streak, 1)
+    when p_last_claim = p_today - 1 then greatest(p_last_streak, 0) + 1
+    else 1
+  end;
+$$;
+
+-- Where the player's streak stands today:
+-- {"claimed_today": false, "streak_day": 4, "coins": 350}
+create or replace function public.daily_bonus_status(p_user uuid) returns jsonb
+language sql stable as $$
+  select jsonb_build_object(
+    'claimed_today', coalesce(p.last_daily_claim = today.d, false),
+    'streak_day', public.daily_streak_day(p.last_daily_claim, p.daily_streak, today.d),
+    'coins', public.daily_bonus_coins(public.daily_streak_day(p.last_daily_claim, p.daily_streak, today.d))
+  )
+  from (select (now() at time zone 'UTC')::date as d) as today
+  left join public.profiles p on p.id = p_user;
+$$;
+
+-- Once per UTC day; the amount follows the streak.
 create or replace function public.claim_daily_bonus(p_user uuid)
 returns bigint language plpgsql security definer set search_path = public as $$
 declare
-  today text := to_char(now() at time zone 'UTC', 'YYYY-MM-DD');
+  today date := (now() at time zone 'UTC')::date;
+  last_claim date;
+  last_streak int;
+  day int;
 begin
-  insert into public.coin_ledger (user_id, amount, kind, idempotency_key)
-  values (p_user, 200, 'daily_bonus', 'daily:' || p_user || ':' || today);
+  select last_daily_claim, daily_streak into last_claim, last_streak
+    from public.profiles where id = p_user for update;
+  if not found then
+    raise exception 'no profile for this player' using errcode = 'P0001';
+  end if;
+  if last_claim = today then
+    raise exception 'daily bonus already claimed today' using errcode = 'P0001';
+  end if;
+
+  day := public.daily_streak_day(last_claim, last_streak, today);
+  insert into public.coin_ledger (user_id, amount, kind, ref, idempotency_key)
+  values (p_user, public.daily_bonus_coins(day), 'daily_bonus', 'day:' || day,
+          'daily:' || p_user || ':' || to_char(today, 'YYYY-MM-DD'));
+  update public.profiles set daily_streak = day, last_daily_claim = today where id = p_user;
   return public.get_balance(p_user);
 exception when unique_violation then
   raise exception 'daily bonus already claimed today' using errcode = 'P0001';
 end $$;
-
--- Has today's (UTC) bonus been claimed already?
-create or replace function public.daily_bonus_claimed(p_user uuid) returns boolean
-language sql stable as $$
-  select exists (
-    select 1 from public.coin_ledger
-    where user_id = p_user and kind = 'daily_bonus'
-      and idempotency_key = 'daily:' || p_user || ':' || to_char(now() at time zone 'UTC', 'YYYY-MM-DD')
-  );
-$$;
 
 -- One reward per completed ad, at most five per UTC day.
 create or replace function public.reward_ad(p_user uuid, p_ad_id text)

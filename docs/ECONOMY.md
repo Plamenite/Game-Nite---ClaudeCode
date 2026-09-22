@@ -18,10 +18,10 @@ partnership.
 | Rule | Value |
 |---|---|
 | Starting coins for a new player | 1,000 |
-| Daily bonus, once per day (UTC) | 200 |
+| Daily bonus, once per day (UTC) | Login streak: 200 on day 1, +50 each consecutive day, 500 from day 7 on; miss a day and it restarts at day 1 |
 | Rewarded video, per completed ad | 100, at most 5 ads per day |
 | Table entry tiers | Free practice, 500, 2,000, 10,000 |
-| Table fee | 10% of the losing side's entries, rounded up by leftovers |
+| Table fee | 10% of the losing side's entries at every tier (flat, decided), rounded up by leftovers |
 
 ## How a table works
 
@@ -87,7 +87,7 @@ with the same audience. What Ludo Star does, and where Gamenite stands:
 |---|---|---|
 | Coins for table entries, tiers from low to very high | Free, 500, 2,000, 10,000 | Add higher tiers as balances grow; gate them by level later |
 | Winner takes the entries of the losers | Same, minus a 10% table fee | Keep |
-| Daily login bonus that grows with a streak | Flat 200 a day | Streak: day 1 to 7 rising, resets when a day is missed |
+| Daily login bonus that grows with a streak | Live: 200, 250 ... 500 by day 7, restarts after a missed day | Keep; revisit the numbers with real play data |
 | Free coins for watching short videos | 100 per ad, five a day | Same, live once the ad account exists |
 | Daily spin for coins and gems | Not yet | Free daily spin with fixed, published odds; no real-money spins |
 | Gems: a second, rarer currency for chests, cosmetics, skipping ads | Not yet | Gems for cosmetics and voice minutes; never for table entries |
@@ -99,6 +99,16 @@ Two Ludo Star mechanics we deliberately keep out for the App Store:
 nothing with random rewards is ever bought with real money, and coins are
 never sent between players as a balance transfer. Gifts are small fixed
 bonuses the server grants, not a way to move coins.
+
+## The login streak
+
+- The first claim of a streak pays 200. Every consecutive UTC day adds 50,
+  so day 2 pays 250, day 3 pays 300, and day 7 and every day after pay 500.
+- Missing a day restarts the streak at day 1. The streak day keeps counting
+  past seven (a "day 30 streak" still pays 500) so long streaks feel earned.
+- The database keeps the streak day and the last claim date on the profile,
+  written only inside the claim; the ledger row records which day it paid.
+  The phone shows the day, the amount, and what tomorrow pays.
 
 ## When coins actually move at a table
 

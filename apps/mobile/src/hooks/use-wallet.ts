@@ -1,4 +1,4 @@
-import { DAILY_BONUS_COINS, WALLET_ROUTES, type WalletSnapshot } from '@gamenite/game-rules';
+import { WALLET_ROUTES, dailyBonusForDay, type WalletSnapshot } from '@gamenite/game-rules';
 import { useCallback, useState } from 'react';
 
 import { getClient } from '@/lib/colyseus';
@@ -39,5 +39,8 @@ export function useWallet() {
     }
   }, [refresh]);
 
-  return { wallet, busy, error, refresh, claimDaily, dailyBonusCoins: DAILY_BONUS_COINS };
+  // What tomorrow pays if the streak continues, for the "come back" line.
+  const tomorrowCoins = dailyBonusForDay((wallet?.streakDay ?? 0) + 1);
+
+  return { wallet, busy, error, refresh, claimDaily, tomorrowCoins };
 }
