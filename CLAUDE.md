@@ -37,8 +37,9 @@
   iOS support. Android is a confirmed second target, never a reason to compromise iOS.
 
 ## 5. Tech stack — DECIDED with the founder on 2026-09-22
-- Frontend: **React Native + Expo (TypeScript)**. One codebase for iOS
-  now and Android soon; EAS builds iOS in the cloud (founder is on Windows).
+- Frontend: **React Native + Expo (TypeScript)**, one codebase for iOS now and
+  Android soon; EAS builds iOS in the cloud. Bundle id `app.plamenite.gamenite`,
+  domain plamenite.app. Undecided: AdMob, RevenueCat.
 - Game server: **Colyseus (TS)**, authoritative: deals, hides hands, validates moves.
 - Voice: **Agora** (~$0.99/1k user-min after 10k free). OFF by default, auto-leave
   idle, small free daily allowance, VIP unlimited, coins for extra, server meters.
@@ -52,7 +53,6 @@
   lets them in; leader picks game/sides/tier, removes, hands over lead; all
   Ready, leader starts; lounge survives the game. Empty seats fill with
   strangers (friends stay partners, best of 1). Voice: mic off, mute-for-me.
-- Bundle id `app.plamenite.gamenite`; domain plamenite.app. Undecided: AdMob, RevenueCat.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
