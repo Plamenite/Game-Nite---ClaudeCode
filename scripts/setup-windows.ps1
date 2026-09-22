@@ -1,0 +1,119 @@
+# ============================================================================
+#  Gamenite: one-shot Windows setup
+#
+#  What this does, in order:
+#    1. Installs Git, Node.js (LTS) and VS Code using winget (built into Windows).
+#    2. Fixes two common Windows problems (script policy, long file paths).
+#    3. Asks for your name + GitHub email and tells Git who you are.
+#    4. Installs Expo's build tool (eas-cli).
+#    5. Downloads the Gamenite code into Documents\gamenite and installs it.
+#
+#  Run it by pasting this ONE line into PowerShell and pressing Enter:
+#    irm https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/scripts/setup-windows.ps1 | iex
+#
+#  It is safe to run more than once. Steps already done are skipped.
+# ============================================================================
+
+$ErrorActionPreference = 'Stop'
+$Branch  = 'claude/modest-gates-unuglw'
+$RepoUrl = 'https://github.com/Plamenite/Game-Nite---ClaudeCode.git'
+$Target  = Join-Path $HOME 'Documents\gamenite'
+
+function Step($msg) { Write-Host ""; Write-Host "==> $msg" -ForegroundColor Cyan }
+function Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
+function Warn($msg) { Write-Host "    $msg" -ForegroundColor Yellow }
+
+function Refresh-Path {
+  $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+  $user    = [Environment]::GetEnvironmentVariable('Path', 'User')
+  $env:Path = "$machine;$user"
+}
+
+function Install-IfMissing($command, $wingetId, $label) {
+  if (Get-Command $command -ErrorAction SilentlyContinue) {
+    Ok "$label is already installed. Skipping."
+    return
+  }
+  Step "Installing $label (this can take a few minutes)"
+  winget install -e --id $wingetId --accept-package-agreements --accept-source-agreements | Out-Host
+  Refresh-Path
+  if (Get-Command $command -ErrorAction SilentlyContinue) {
+    Ok "$label installed."
+  } else {
+    Warn "$label was installed but this window cannot see it yet."
+    Warn "Close PowerShell, open a new one, and run the same command again."
+    exit 1
+  }
+}
+
+Step "Checking that winget (Windows package manager) is available"
+if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+  Write-Host "winget is missing. Open the Microsoft Store, install 'App Installer', then run this again." -ForegroundColor Red
+  exit 1
+}
+Ok "winget found."
+
+Install-IfMissing 'git'  'Git.Git'                   'Git'
+Install-IfMissing 'node' 'OpenJS.NodeJS.LTS'         'Node.js LTS'
+Install-IfMissing 'code' 'Microsoft.VisualStudioCode' 'VS Code'
+
+Step "Allowing npm helper scripts to run in PowerShell"
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+Ok "Done."
+
+Step "Letting Git handle very long folder paths"
+git config --global core.longpaths true
+Ok "Done."
+
+Step "Telling Git who you are (shows on your commits)"
+$existingName  = git config --global user.name
+$existingEmail = git config --global user.email
+if ($existingName -and $existingEmail) {
+  Ok "Already set: $existingName <$existingEmail>"
+} else {
+  $name  = Read-Host "Your name"
+  $email = Read-Host "The email on your GitHub account"
+  git config --global user.name  "$name"
+  git config --global user.email "$email"
+  Ok "Saved."
+}
+
+Step "Installing Expo's build tool (eas-cli)"
+npm install -g eas-cli | Out-Host
+Ok "Done."
+
+Step "Downloading the Gamenite code"
+if (Test-Path (Join-Path $Target '.git')) {
+  Ok "Already downloaded at $Target. Pulling latest changes."
+  git -C $Target pull origin $Branch | Out-Host
+} else {
+  New-Item -ItemType Directory -Force -Path (Split-Path $Target) | Out-Null
+  git clone --branch $Branch $RepoUrl $Target | Out-Host
+  Ok "Downloaded to $Target"
+}
+
+Step "Installing the project's packages (this is the slow part, 2-5 minutes)"
+Push-Location $Target
+try {
+  npm install --no-audit --no-fund | Out-Host
+} finally {
+  Pop-Location
+}
+Ok "Done."
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host " Setup complete." -ForegroundColor Green
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host ""
+Write-Host " Versions installed:"
+Write-Host "   git  " (git --version)
+Write-Host "   node " (node --version)
+Write-Host "   npm  " (npm --version)
+Write-Host ""
+Write-Host " Next steps:"
+Write-Host "   1. Close this PowerShell window and open a new one."
+Write-Host "   2. Run:   eas login          (use your expo.dev account)"
+Write-Host "   3. Run:   cd $Target"
+Write-Host "   4. Run:   npm run mobile     then scan the QR code with your iPhone camera."
+Write-Host ""

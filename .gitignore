@@ -1,0 +1,19 @@
+# Installed packages (re-created by `npm install`)
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Secrets and local settings. Never commit real keys.
+.env
+.env.*
+!.env.example
+!.env.development
+!.env.production
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.log
+.idea/

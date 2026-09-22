@@ -1,0 +1,22 @@
+{
+  "name": "gamenite",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Gamenite: iOS-first multiplayer board and card game platform (Sequence, Court Piece).",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build -w @gamenite/game-rules",
+    "mobile": "npm run start -w @gamenite/mobile",
+    "mobile:tunnel": "npm run start -w @gamenite/mobile -- --tunnel",
+    "server": "npm run start -w @gamenite/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint -w @gamenite/mobile"
+  }
+}

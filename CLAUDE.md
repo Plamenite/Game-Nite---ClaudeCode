@@ -66,9 +66,24 @@ iOS-first mobile multiplayer board/card game platform.
   free daily allowance per player; VIP subscription = unlimited; extra
   minutes buyable with coins; server meters every player's minutes.
 - Proposed, not yet decided: AdMob for ads, RevenueCat for IAP/VIP.
-- Still to confirm with founder: repo layout and iOS bundle identifier.
+- Bundle identifier: `app.plamenite.gamenite` (iOS + Android). Founder
+  typed the domain as "plamentie.app"; spelling MUST be confirmed before
+  the app is first registered with Apple, after which it is permanent.
 
-## 6. Project conventions
+## 6. Repo layout (one repo, npm workspaces) and how it is wired
+- `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
+  `packages/game-rules` shared TS rules used by BOTH (ES module).
+- Dev resolves the shared package to SOURCE via tsconfig `paths` (server:
+  tsx watch; app: Metro + `metro.config.js` maps `.js` imports to `.ts`).
+  Prod server build uses `dist/`, built by root `postinstall`.
+- `apps/mobile/expo-env.d.ts` is committed on purpose so `tsc` works on a
+  fresh clone. Expo regenerates identical content; never edit it.
+- Root commands: `npm run mobile`, `npm run server`, `npm test`,
+  `npm run typecheck`. Windows setup: `scripts/setup-windows.ps1`.
+- Game rules are NOT implemented yet: only card primitives, the game
+  catalogue, and fixed facts (Jack eyes, player counts). Spec with founder.
+
+## 7. Project conventions
 - Founder's machines: Windows PC daily; a ~2024 MacBook Air is available
   when Xcode is truly needed (simulator, native debugging).
 - Branch for current work: `claude/modest-gates-unuglw`.

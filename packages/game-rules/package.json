@@ -1,0 +1,23 @@
+{
+  "name": "@gamenite/game-rules",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared rules and card primitives for Gamenite. Used by BOTH the phone app and the game server so they can never disagree.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}
