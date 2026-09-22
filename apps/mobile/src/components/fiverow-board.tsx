@@ -94,6 +94,9 @@ export function FiveRowBoard({ snapshot, hand, mySessionId, clockOffset, notice,
   return (
     <View style={styles.wrapper}>
       <ThemedText type="subtitle">{headline}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {snapshot.entry > 0 ? `Table entry ${snapshot.entry.toLocaleString()} coins` : 'Practice table'}
+      </ThemedText>
       <View style={styles.seats}>
         {snapshot.seats.map((seat) => (
           <View key={seat.sessionId} style={styles.seat}>

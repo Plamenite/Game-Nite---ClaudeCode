@@ -70,12 +70,12 @@ export function useFiveRow() {
 
   /** Quick play: sit at any open table of this shape, or open a new one. */
   const quickPlay = useCallback(
-    async (players: 2 | 3 | 4 = 2) => {
+    async (players: 2 | 3 | 4 = 2, entry = 0) => {
       if (roomRef.current) return;
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().joinOrCreate<FiveRowStateLike>(ROOMS.fiverow, { players, name: guest.name });
+        const room = await getClient().joinOrCreate<FiveRowStateLike>(ROOMS.fiverow, { players, entry, name: guest.name });
         attach(room);
       } catch (e) {
         setStatus('error');

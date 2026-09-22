@@ -15,6 +15,7 @@ import { GAMES, PARTY_JOIN_FILTER_KEY, ROOMS } from "@gamenite/game-rules";
 import { PartyRoom } from "./rooms/PartyRoom.js";
 import { FiveRowRoom } from "./rooms/FiveRowRoom.js";
 import { CourtPieceRoom } from "./rooms/CourtPieceRoom.js";
+import { walletEndpoints } from "./wallet.js";
 
 const server = defineServer({
 
@@ -23,9 +24,9 @@ const server = defineServer({
    */
   rooms: {
     // Quick play: joinOrCreate with { players: 2 | 3 | 4 } picks the table shape.
-    [ROOMS.fiverow]: defineRoom(FiveRowRoom).filterBy(["players"]).enableRealtimeListing(),
+    [ROOMS.fiverow]: defineRoom(FiveRowRoom).filterBy(["players", "entry"]).enableRealtimeListing(),
     // Quick play: joinOrCreate with { variant } picks Single or Double Siri.
-    [ROOMS.courtpiece]: defineRoom(CourtPieceRoom).filterBy(["variant"]).enableRealtimeListing(),
+    [ROOMS.courtpiece]: defineRoom(CourtPieceRoom).filterBy(["variant", "entry"]).enableRealtimeListing(),
     // Friends join with partyJoinOptions(name, code). The matchmaker forwards
     // the "code" option and its driver matches it against the room's
     // metadata.code, which PartyRoom sets in onCreate.
@@ -48,6 +49,8 @@ const server = defineServer({
     api_games: createEndpoint("/api/games", { method: "GET" }, async (ctx) => {
       return { games: GAMES };
     }),
+    // Balance and daily bonus. The SDK sends the player's token as a bearer header.
+    ...walletEndpoints,
   }),
 
   /**
@@ -57,7 +60,7 @@ const server = defineServer({
   express: (app) => {
 
     app.get("/hi", (req, res) => {
-      res.send("It's time to kick ass and chew bubblegum!");
+      res.send("Gamenite server is up.");
     });
 
     /**

@@ -28,6 +28,8 @@ export const CourtPieceState = schema({
   phase: t.string().default("waiting"),
   variant: t.string().default("single_siri"),
   bestOf: t.uint8().default(1),
+  /** Coins each seat paid; 0 for practice. */
+  entry: t.uint32().default(0),
   dealNumber: t.uint8().default(0),
   score0: t.uint8().default(0),
   score1: t.uint8().default(0),

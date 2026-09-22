@@ -19,6 +19,7 @@ export interface Ledger {
   /** First sight of a player: profile plus starting coins, once. Returns the balance. */
   ensureProfile(userId: string, displayName: string, isGuest: boolean): Promise<number>;
   getBalance(userId: string): Promise<number>;
+  dailyBonusClaimed(userId: string): Promise<boolean>;
   claimDailyBonus(userId: string): Promise<number>;
   rewardAd(userId: string, adId: string): Promise<number>;
   /** Charges the entry; throws LedgerError('not enough coins') when unaffordable. Idempotent per table. */
@@ -53,6 +54,10 @@ export class MemoryLedger implements Ledger {
 
   async getBalance(userId: string): Promise<number> {
     return this.balances.get(userId) ?? 0;
+  }
+
+  async dailyBonusClaimed(userId: string): Promise<boolean> {
+    return this.keys.has(`daily:${userId}:${utcDay()}`);
   }
 
   async claimDailyBonus(userId: string): Promise<number> {
@@ -103,6 +108,9 @@ export class SupabaseLedger implements Ledger {
   }
   getBalance(userId: string) {
     return this.rpc<number>("get_balance", { p_user: userId }).then(Number);
+  }
+  dailyBonusClaimed(userId: string) {
+    return this.rpc<boolean>("daily_bonus_claimed", { p_user: userId }).then(Boolean);
   }
   claimDailyBonus(userId: string) {
     return this.rpc<number>("claim_daily_bonus", { p_user: userId }).then(Number);

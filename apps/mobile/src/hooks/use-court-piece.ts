@@ -65,12 +65,12 @@ export function useCourtPiece() {
 
   /** Quick play: sit at any open public table of this variant, or open one. */
   const quickPlay = useCallback(
-    async (variant: CourtPieceVariant = 'single_siri') => {
+    async (variant: CourtPieceVariant = 'single_siri', entry = 0) => {
       if (roomRef.current) return;
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().joinOrCreate<CourtPieceStateLike>(ROOMS.courtpiece, { variant, name: guest.name });
+        const room = await getClient().joinOrCreate<CourtPieceStateLike>(ROOMS.courtpiece, { variant, entry, name: guest.name });
         attach(room);
       } catch (e) {
         setStatus('error');

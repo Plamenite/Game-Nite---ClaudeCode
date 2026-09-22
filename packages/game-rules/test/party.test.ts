@@ -41,7 +41,7 @@ test('toPartySnapshot marks the leader and computes canLaunch', () => {
     ['L', { name: 'Zain', ready: true, team: 0 }],
     ['M', { name: 'Friend', ready: true, team: 1 }],
   ]);
-  const snap = toPartySnapshot({ code: 'K7PM3X', leaderSessionId: 'L', status: 'open', game: 'fiverow', variant: 'single_siri', bestOf: 1, members });
+  const snap = toPartySnapshot({ code: 'K7PM3X', leaderSessionId: 'L', status: 'open', game: 'fiverow', variant: 'single_siri', bestOf: 1, entry: 500, members });
   assert.deepEqual(snap.members, [
     { sessionId: 'L', name: 'Zain', ready: true, isLeader: true, team: 0 },
     { sessionId: 'M', name: 'Friend', ready: true, isLeader: false, team: 1 },

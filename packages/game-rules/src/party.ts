@@ -24,6 +24,8 @@ export interface PartyGameChoice {
   variant?: 'single_siri' | 'double_siri';
   /** Court Piece only; private tables may pick 1, 3 or 5. */
   bestOf?: 1 | 3 | 5;
+  /** Coins each player pays to sit: 0, 500, 2000 or 10000. */
+  entry?: number;
 }
 
 export const PARTY_GAMES: readonly PartyGameChoice['game'][] = ['fiverow', 'courtpiece'];
@@ -104,6 +106,7 @@ export interface PartySnapshot {
   game: PartyGameChoice['game'];
   variant: NonNullable<PartyGameChoice['variant']>;
   bestOf: NonNullable<PartyGameChoice['bestOf']>;
+  entry: number;
   members: PartyMemberSnapshot[];
   /** True when the leader is allowed to launch right now. */
   canLaunch: boolean;
@@ -117,6 +120,7 @@ export interface PartyStateLike {
   game: string;
   variant: string;
   bestOf: number;
+  entry: number;
   members: {
     forEach(cb: (member: { name: string; ready: boolean; team: number }, sessionId: string) => void): void;
   };
@@ -190,6 +194,7 @@ export function toPartySnapshot(state: PartyStateLike): PartySnapshot {
     game: state.game as PartyGameChoice['game'],
     variant: state.variant as NonNullable<PartyGameChoice['variant']>,
     bestOf: state.bestOf as NonNullable<PartyGameChoice['bestOf']>,
+    entry: state.entry,
     members,
     canLaunch: canLaunchParty(members, state.status, state.game),
   };

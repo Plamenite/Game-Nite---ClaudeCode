@@ -84,7 +84,8 @@ export function CourtPieceTable({ snapshot, hand, mySessionId, clockOffset, noti
     <View style={styles.wrapper}>
       <ThemedText type="subtitle">{headline}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        {variantName} · deal {snapshot.dealNumber} of best of {snapshot.bestOf} · series {snapshot.score[0]}–{snapshot.score[1]}
+        {variantName} · deal {snapshot.dealNumber} of best of {snapshot.bestOf} · series {snapshot.score[0]}–{snapshot.score[1]} ·{' '}
+        {snapshot.entry > 0 ? `entry ${snapshot.entry.toLocaleString()}` : 'practice'}
       </ThemedText>
       <View style={styles.scoreRow}>
         <Score team={0} tricks={snapshot.collected[0]} mine={myTeam === 0} />

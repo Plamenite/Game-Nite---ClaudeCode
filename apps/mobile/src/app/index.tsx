@@ -6,6 +6,7 @@ import { AnimatedIcon } from '@/components/animated-icon';
 import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WalletCard } from '@/components/wallet-card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function HomeScreen() {
@@ -21,6 +22,8 @@ export default function HomeScreen() {
             Board and card nights with friends, anywhere.
           </ThemedText>
         </ThemedView>
+
+        <WalletCard />
 
         <ThemedText type="code" style={styles.code}>
           games

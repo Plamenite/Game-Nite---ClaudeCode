@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { Room, Client, CloseCode, Delayed } from "colyseus";
+import { Room, Client, CloseCode, Delayed, ServerError } from "colyseus";
 import {
   FIVEROW_ABANDONED_MOVE_DELAY_MS,
   FIVEROW_CELL_COUNT,
@@ -13,17 +13,20 @@ import {
   createFiveRowMatch,
   currentPlayer,
   fiverowConfigForPlayers,
+  isTableEntry,
   mustPass,
   passTurn,
   playMove,
   randomLegalMove,
   sanitizeDisplayName,
+  settleTable,
   type FiveRowMatch,
   type FiveRowMove,
   type FiveRowTableConfig,
 } from "@gamenite/game-rules";
-import { authenticate } from "../auth.js";
+import { authenticate, type PlayerAuth } from "../auth.js";
 import { isTrustedLaunch } from "../launch.js";
+import { LedgerError, getLedger } from "../ledger.js";
 import { FiveRowRun, FiveRowSeat, FiveRowState } from "./schema/FiveRowState.js";
 
 /** Unpredictable dealing: never Math.random on the server. randomInt's range must stay below 2^48. */
@@ -33,6 +36,8 @@ const secureRandom = () => randomInt(0, RANDOM_RANGE) / RANDOM_RANGE;
 /** Set by a party launch (trusted) or by quick play. */
 export interface FiveRowRoomOptions {
   players?: number;
+  /** Coins each seat pays: 0, 500, 2000 or 10000. */
+  entry?: number;
   launchSecret?: string;
 }
 
@@ -47,7 +52,7 @@ export interface FiveRowJoinOptions {
  * everything about the game; this room only handles seats, timers,
  * private hands, and the founder's timeout policy.
  */
-export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players: number } }> {
+export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players: number; entry: number } }> {
   state = new FiveRowState();
 
   private config: FiveRowTableConfig = FIVEROW_TABLE_CONFIGS[0];
@@ -56,6 +61,13 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
   private order: (string | undefined)[] = [];
   /** A party launch may place players in chosen seats. */
   private trusted = false;
+  /** Coins each seat paid. */
+  private entry = 0;
+  /** userId per sessionId, for the ledger. */
+  private userOf = new Map<string, string>();
+  /** Users refunded after leaving early; they may not re-enter for free. */
+  private refunded = new Set<string>();
+  private settled = false;
   private turnTimer?: Delayed;
   private turnSeconds = FIVEROW_TURN_SECONDS;
 
@@ -72,8 +84,10 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
     this.maxClients = this.config.players;
     this.trusted = isTrustedLaunch(options);
     this.order = new Array(this.config.players).fill(undefined);
-    // Quick play filters on this so 1v1 seekers never land at a 2v2 table.
-    await this.setMetadata({ players: this.config.players });
+    this.entry = isTableEntry(options?.entry) ? Number(options!.entry) : 0;
+    this.state.entry = this.entry;
+    // Quick play filters on these so seekers land at the right size and tier.
+    await this.setMetadata({ players: this.config.players, entry: this.entry });
     this.state.players = this.config.players;
     this.state.teams = this.config.teams;
     for (let i = 0; i < FIVEROW_CELL_COUNT; i++) {
@@ -84,16 +98,21 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
     this.turnSeconds = Number(process.env.FIVEROW_TURN_SECONDS) || FIVEROW_TURN_SECONDS;
   }
 
-  onJoin(client: Client, options: FiveRowJoinOptions | undefined) {
+  async onJoin(client: Client, options: FiveRowJoinOptions | undefined) {
+    const auth = client.auth as PlayerAuth;
+    const name = sanitizeDisplayName(options?.name);
+    await this.chargeSeat(auth, name);
+
     const wanted = Number(options?.seat);
     const free = this.order.findIndex((id) => id === undefined);
     const index = this.trusted && Number.isInteger(wanted) && wanted >= 0 && wanted < this.order.length && this.order[wanted] === undefined ? wanted : free;
 
     const seat = new FiveRowSeat();
-    seat.name = sanitizeDisplayName(options?.name);
+    seat.name = name;
     seat.team = index % this.config.teams;
     this.state.seats.set(client.sessionId, seat);
     this.order[index] = client.sessionId;
+    this.userOf.set(client.sessionId, auth.userId);
 
     if (this.order.every((id) => id !== undefined)) {
       this.lock();
@@ -120,9 +139,10 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
     seat.connected = false;
 
     if (this.state.phase === "waiting") {
-      // Free the seat for someone else.
+      // Free the seat for someone else, and give the entry back.
       this.state.seats.delete(client.sessionId);
       this.order = this.order.map((id) => (id === client.sessionId ? undefined : id));
+      void this.refundSeat(client.sessionId);
       this.unlock();
       return;
     }
@@ -179,6 +199,7 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
       this.state.phase = "finished";
       this.state.turnDeadline = 0;
       this.turnTimer?.clear();
+      void this.settleCoins(m.winner);
     }
 
     for (const client of this.clients) this.sendPrivate(client);
@@ -247,6 +268,46 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
       const [winner] = [...present];
       this.match = { ...this.match, winner };
     }
+  }
+
+  // ------------------------------------------------------------ coins
+
+  /** Wallet check and entry charge, BEFORE any seat state changes. Throws to reject the join. */
+  private async chargeSeat(auth: PlayerAuth, name: string) {
+    const ledger = getLedger();
+    await ledger.ensureProfile(auth.userId, name, auth.guest);
+    if (this.entry === 0) return;
+    if (this.refunded.has(auth.userId)) throw new ServerError(403, "You left this table; join another one.");
+    try {
+      await ledger.chargeTableEntry(auth.userId, this.roomId, this.entry);
+    } catch (error) {
+      if (error instanceof LedgerError) {
+        const balance = await ledger.getBalance(auth.userId);
+        throw new ServerError(402, `You need ${this.entry.toLocaleString()} coins for this table. You have ${balance.toLocaleString()}.`);
+      }
+      throw error;
+    }
+  }
+
+  private async refundSeat(sessionId: string) {
+    const userId = this.userOf.get(sessionId);
+    this.userOf.delete(sessionId);
+    if (!userId || this.entry === 0) return;
+    this.refunded.add(userId);
+    await getLedger().settleTable(this.roomId, [{ playerId: userId, amount: this.entry, kind: "table_refund" }]).catch((e) => console.error("refund failed", e));
+  }
+
+  /** Once per table: winners take the losers' entries minus the fee; a draw refunds. */
+  private async settleCoins(winnerTeam: number | null) {
+    if (this.settled || this.entry === 0) return;
+    this.settled = true;
+    const seats: { playerId: string; team: number }[] = [];
+    this.state.seats.forEach((seat, sessionId) => {
+      const userId = this.userOf.get(sessionId);
+      if (userId) seats.push({ playerId: userId, team: seat.team });
+    });
+    const settlement = settleTable(this.entry, seats, winnerTeam);
+    await getLedger().settleTable(this.roomId, settlement.moves).catch((e) => console.error("settlement failed", e));
   }
 
   // ------------------------------------------------------------ messages

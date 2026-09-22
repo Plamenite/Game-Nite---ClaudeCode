@@ -49,6 +49,8 @@ export interface CourtPieceTableSnapshot {
   phase: CourtPieceTablePhase;
   variant: CourtPieceVariant;
   bestOf: CourtPieceBestOf;
+  /** Coins each seat paid; 0 for practice. */
+  entry: number;
   dealNumber: number;
   score: [number, number];
   seriesWinner: number;
@@ -78,6 +80,7 @@ export interface CourtPieceStateLike {
   phase: string;
   variant: string;
   bestOf: number;
+  entry: number;
   dealNumber: number;
   score0: number;
   score1: number;
@@ -141,6 +144,7 @@ export function toCourtPieceSnapshot(state: CourtPieceStateLike): CourtPieceTabl
     phase: state.phase as CourtPieceTablePhase,
     variant: state.variant as CourtPieceVariant,
     bestOf: state.bestOf as CourtPieceBestOf,
+    entry: state.entry,
     dealNumber: state.dealNumber,
     score: [state.score0, state.score1],
     seriesWinner: state.seriesWinner,

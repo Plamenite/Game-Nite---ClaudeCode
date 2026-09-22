@@ -26,6 +26,8 @@ export const FiveRowState = schema({
   phase: t.string().default("waiting"),
   players: t.uint8().default(2),
   teams: t.uint8().default(2),
+  /** Coins each seat paid; 0 for practice. */
+  entry: t.uint32().default(0),
 
   /** 100 cells: team index, or -1 for no chip. */
   chips: t.array("int8"),

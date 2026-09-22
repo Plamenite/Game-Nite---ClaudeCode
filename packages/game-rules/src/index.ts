@@ -13,4 +13,5 @@ export * from './court-piece-table.js';
 export * from './table.js';
 export * from './table-policy.js';
 export * from './economy.js';
+export * from './wallet.js';
 export * from './party.js';

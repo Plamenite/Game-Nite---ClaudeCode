@@ -10,6 +10,7 @@ import {
   SKELETON_PARTY_SIZE,
   canLaunchParty,
   fiverowConfigForPlayers,
+  isTableEntry,
   isTeamGame,
   seatsForParty,
   type PartyGameChoice,
@@ -19,6 +20,7 @@ import {
 } from "@gamenite/game-rules";
 import { authenticate } from "../auth.js";
 import { LAUNCH_SECRET } from "../launch.js";
+import { getLedger } from "../ledger.js";
 import { PartyMember, PartyState } from "./schema/PartyState.js";
 
 /** What the phone sends when creating or joining a party (see partyJoinOptions). */
@@ -43,11 +45,18 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
   state = new PartyState();
 
   messages = {
-    [PARTY_MESSAGES.setReady]: (client: Client, message: { ready?: boolean } | undefined) => {
+    [PARTY_MESSAGES.setReady]: async (client: Client, message: { ready?: boolean } | undefined) => {
       if (this.state.status !== "open") { return; }
       const member = this.state.members.get(client.sessionId);
       if (!member) { return; }
-      member.ready = Boolean(message?.ready);
+      const ready = Boolean(message?.ready);
+      if (ready && this.state.entry > 0) {
+        const balance = await getLedger().getBalance(client.auth?.userId ?? "");
+        if (balance < this.state.entry) {
+          return this.refuse(client, `You need ${this.state.entry.toLocaleString()} coins for this table. You have ${balance.toLocaleString()}.`);
+        }
+      }
+      member.ready = ready;
     },
 
     [PARTY_MESSAGES.setGame]: (client: Client, choice: PartyGameChoice | undefined) => {
@@ -63,6 +72,12 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
         if (!(COURT_PIECE_PRIVATE_BEST_OF as readonly number[]).includes(Number(choice.bestOf))) return this.refuse(client, "Best of 1, 3 or 5 only.");
         this.state.bestOf = Number(choice.bestOf);
       }
+      if (choice.entry !== undefined) {
+        if (!isTableEntry(choice.entry)) return this.refuse(client, "Table entry must be free, 500, 2,000 or 10,000.");
+        this.state.entry = Number(choice.entry);
+      }
+      // Settings changed: everyone confirms again (and affordability is re-checked).
+      this.state.members.forEach((m) => { m.ready = false; });
     },
 
     [PARTY_MESSAGES.setTeam]: (client: Client, payload: { sessionId?: string; team?: number } | undefined) => {
@@ -87,7 +102,7 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
     await this.setMetadata({ code: this.state.code });
   }
 
-  onJoin(client: Client, options: PartyJoinOptions) {
+  async onJoin(client: Client, options: PartyJoinOptions) {
     const isCreator = this.state.members.size === 0;
 
     if (!isCreator && normalizePartyCode(options?.[PARTY_JOIN_FILTER_KEY]) !== this.state.code) {
@@ -105,6 +120,8 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
     if (isCreator) {
       this.state.leaderSessionId = client.sessionId;
     }
+    // Make sure the player has a wallet (and the one-time starting coins).
+    await getLedger().ensureProfile(client.auth?.userId ?? "", member.name, client.auth?.guest ?? true);
     console.log("party", this.state.code, "+", member.name, isCreator ? "(leader)" : "");
   }
 
@@ -147,6 +164,7 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
         table = await matchMaker.createRoom(ROOMS.courtpiece, {
           variant: this.state.variant,
           bestOf: this.state.bestOf,
+          entry: this.state.entry,
           launchSecret: LAUNCH_SECRET,
         });
       } else {
@@ -155,7 +173,7 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
           this.state.status = "open";
           return this.refuse(leader, "Five Row needs 2, 3 or 4 players.");
         }
-        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players, launchSecret: LAUNCH_SECRET });
+        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players, entry: this.state.entry, launchSecret: LAUNCH_SECRET });
       }
 
       // Reserve one seat per member and hand each phone its own reservation.

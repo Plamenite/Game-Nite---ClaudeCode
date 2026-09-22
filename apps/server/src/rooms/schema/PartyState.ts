@@ -27,6 +27,8 @@ export const PartyState = schema({
   game: t.string().default("fiverow"),
   variant: t.string().default("single_siri"),
   bestOf: t.uint8().default(1),
+  /** Coins each player pays to sit; 0 = practice. */
+  entry: t.uint32().default(0),
 
   members: t.map(PartyMember),
 });

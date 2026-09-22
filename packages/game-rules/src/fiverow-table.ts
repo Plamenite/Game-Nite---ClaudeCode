@@ -46,6 +46,8 @@ export interface FiveRowTableSnapshot {
   phase: FiveRowPhase;
   players: number;
   teams: number;
+  /** Coins each seat paid; 0 for practice. */
+  entry: number;
   chips: number[];
   locked: boolean[];
   runs: Run[];
@@ -63,6 +65,7 @@ export interface FiveRowStateLike {
   phase: string;
   players: number;
   teams: number;
+  entry: number;
   chips: { forEach(cb: (v: number, i: number) => void): void; length: number };
   locked: { forEach(cb: (v: boolean, i: number) => void): void; length: number };
   runs: { forEach(cb: (r: { team: number; cells: { forEach(cb: (c: number) => void): void } }) => void): void };
@@ -108,6 +111,7 @@ export function toFiveRowSnapshot(state: FiveRowStateLike): FiveRowTableSnapshot
     phase: state.phase as FiveRowPhase,
     players: state.players,
     teams: state.teams,
+    entry: state.entry,
     chips,
     locked,
     runs,

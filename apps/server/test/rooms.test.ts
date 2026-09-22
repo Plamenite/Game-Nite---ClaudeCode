@@ -17,6 +17,7 @@ import {
 
 import appConfig from "../src/app.config.js";
 import { configureAuth } from "../src/auth.js";
+import { MemoryLedger, getLedger, setLedger } from "../src/ledger.js";
 import { CourtPieceState } from "../src/rooms/schema/CourtPieceState.js";
 import { FiveRowState } from "../src/rooms/schema/FiveRowState.js";
 import { PartyState } from "../src/rooms/schema/PartyState.js";
@@ -29,8 +30,9 @@ import { PartyState } from "../src/rooms/schema/PartyState.js";
 let colyseus: ColyseusTestServer<typeof appConfig>;
 
 before(async () => {
-  // Rooms are tested with the app's pre-login guest tokens.
+  // Rooms are tested with the app's pre-login guest tokens and a memory ledger.
   configureAuth({ allowGuestTokens: true, verifier: null });
+  setLedger(new MemoryLedger());
   colyseus = await boot(appConfig);
 });
 after(async () => colyseus.shutdown());
@@ -40,6 +42,15 @@ beforeEach(async () => {
   // cleanup() signs the SDK out, so the token is set per test, not once.
   colyseus.sdk.auth.token = "guest-TEST";
 });
+
+/** Connect as a distinct guest (the token is the guest's identity). */
+async function connectAs(room: any, token: string, name: string) {
+  colyseus.sdk.auth.token = token;
+  const client = await colyseus.connectTo(room, { name });
+  colyseus.sdk.auth.token = "guest-TEST";
+  return client;
+}
+const coins = (token: string) => getLedger().getBalance(token);
 
 /** Resolve with the next message of this type, or fail the test after a while. */
 function nextMessage<T = any>(room: { onMessage: any }, type: string, timeoutMs = 3000): Promise<T> {
@@ -258,12 +269,12 @@ describe("PartyRoom (walking skeleton)", () => {
 });
 
 describe("CourtPieceRoom (a live game)", () => {
-  /** Seat four guests and return their SDK rooms in seat order, plus their private hands. */
-  async function seatFour(room: any) {
+  /** Seat four distinct guests and return their SDK rooms in seat order, plus their private hands. */
+  async function seatFour(room: any, prefix = "guest-cp") {
     const clients = [];
     const hands: Card[][] = [];
     for (const name of ["Zain", "Ali", "Sara", "Bilal"]) {
-      clients.push(await colyseus.connectTo(room, { name }));
+      clients.push(await connectAs(room, `${prefix}-${name}`, name));
     }
     await waitFor(() => room.state.phase === "playing", 3000, "deal start");
     await room.waitForNextPatch();
@@ -312,9 +323,10 @@ describe("CourtPieceRoom (a live game)", () => {
     assert.strictEqual(after.seats[holder].handCount, 12);
   });
 
-  it("four phones play a whole deal; every trick ends up banked and the result is classified", async () => {
-    const room = await colyseus.createRoom<CourtPieceState>("courtpiece", { variant: "single_siri" });
-    const { clients, hands } = await seatFour(room);
+  it("four phones play a whole deal at 500; every trick ends up banked, coins settle, a rematch charges again", async () => {
+    const room = await colyseus.createRoom<CourtPieceState>("courtpiece", { variant: "single_siri", entry: 500 });
+    const { clients, hands } = await seatFour(room, "guest-deal");
+    for (const n of ["Zain", "Ali", "Sara", "Bilal"]) assert.strictEqual(await coins(`guest-deal-${n}`), 500, "entry charged at seating");
 
     let plays = 0;
     while (room.state.phase === "playing" && plays < 60) {
@@ -338,7 +350,15 @@ describe("CourtPieceRoom (a live game)", () => {
     assert.deepStrictEqual(snap.score, snap.dealWinner === 0 ? [1, 0] : [0, 1]);
     assert.ok(snap.trump !== null || snap.dealResult === "kot", "a trump was set unless nobody ever cut");
 
-    // Everyone votes for a rematch: a fresh deal starts with the score reset.
+    // Coins: winners get 500 back plus 450 each; losers stay at 500.
+    await waitFor(() => true, 10);
+    const names = ["Zain", "Ali", "Sara", "Bilal"];
+    for (const seat of snap.seats) {
+      const expected = seat.team === snap.seriesWinner ? 1450 : 500;
+      assert.strictEqual(await coins(`guest-deal-${names[seat.seat]}`), expected, `${seat.name} after the deal`);
+    }
+
+    // Everyone votes for a rematch: everyone pays again and a fresh deal starts.
     for (const c of clients) c.send("rematch", {});
     await waitFor(() => room.state.phase === "playing", 3000, "rematch");
     await room.waitForNextPatch();
@@ -347,6 +367,10 @@ describe("CourtPieceRoom (a live game)", () => {
     assert.strictEqual(again.dealNumber, 1);
     assert.strictEqual(again.tricksPlayed, 0);
     assert.strictEqual((await fetchHand(clients[2])).length, 13);
+    for (const seat of again.seats) {
+      const expected = seat.team === snap.seriesWinner ? 950 : 0;
+      assert.strictEqual(await coins(`guest-deal-${names[seat.seat]}`), expected, `${seat.name} paid for the rematch`);
+    }
   });
 
   it("slow players are auto-played; when a whole team has abandoned, the other team wins by forfeit", async () => {
@@ -459,5 +483,110 @@ describe("CourtPieceRoom (a live game)", () => {
     const snap = toCourtPieceSnapshot(tables[0].state);
     assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Ali", "Sara", "Bilal"], "default alternating teams: partners opposite");
     assert.strictEqual((await fetchHand(tables[3])).length, 13);
+  });
+});
+
+describe("coins at the table", () => {
+  it("quick play at 500 charges each seat; a forfeit pays the winner the losers' entry minus the fee", async () => {
+    const room = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2, entry: 500 });
+    assert.strictEqual(room.state.entry, 500);
+    const a = await connectAs(room, "guest-c1", "Zain");
+    await connectAs(room, "guest-c2", "Friend");
+    await waitFor(() => room.state.phase === "playing", 3000, "match start");
+    assert.strictEqual(await coins("guest-c1"), 500);
+    assert.strictEqual(await coins("guest-c2"), 500);
+
+    await a.leave(true);
+    await waitFor(() => room.state.phase === "finished", 3000, "forfeit");
+    await waitFor(() => true, 20);
+    assert.strictEqual(await coins("guest-c2"), 1450, "500 back plus 450");
+    assert.strictEqual(await coins("guest-c1"), 500);
+  });
+
+  it("leaving before the table fills refunds the entry, and that player cannot come back for free", async () => {
+    // A 3-player table so the room stays open (with one seat taken) after the leaver goes.
+    const room = await colyseus.createRoom<FiveRowState>("fiverow", { players: 3, entry: 500 });
+    const a = await connectAs(room, "guest-r1", "Zain");
+    await connectAs(room, "guest-r2", "Friend");
+    assert.strictEqual(await coins("guest-r1"), 500);
+    await a.leave(true);
+    await waitFor(() => room.state.seats.size === 1, 3000, "seat freed");
+    await waitFor(() => true, 20);
+    assert.strictEqual(await coins("guest-r1"), 1000, "refunded");
+    assert.strictEqual(await coins("guest-r2"), 500, "the one who stayed is still charged");
+
+    colyseus.sdk.auth.token = "guest-r1";
+    await assert.rejects(colyseus.sdk.joinById(room.roomId, { name: "Zain" }), /left this table/i);
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.strictEqual(await coins("guest-r1"), 1000);
+  });
+
+  it("a player who cannot afford the tier is refused, and free practice charges nothing", async () => {
+    const pricey = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2, entry: 2000 });
+    colyseus.sdk.auth.token = "guest-poor";
+    await assert.rejects(colyseus.sdk.joinById(pricey.roomId, { name: "Poor" }), /need 2,000 coins/i);
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.strictEqual(await coins("guest-poor"), 1000, "a refused seat costs nothing");
+
+    const free = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2, entry: 0 });
+    await connectAs(free, "guest-f1", "A");
+    await connectAs(free, "guest-f2", "B");
+    await waitFor(() => free.state.phase === "playing", 3000, "match start");
+    assert.strictEqual(await coins("guest-f1"), 1000);
+    assert.strictEqual(await coins("guest-f2"), 1000);
+  });
+
+  it("quick play never mixes tiers", async () => {
+    const cheap = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2, entry: 500 });
+    colyseus.sdk.auth.token = "guest-tier-free";
+    const practice = await colyseus.sdk.joinOrCreate<FiveRowState>("fiverow", { players: 2, entry: 0, name: "Practice" });
+    assert.notStrictEqual(practice.roomId, cheap.roomId, "a free seeker never lands at a 500 table");
+    assert.strictEqual(colyseus.getRoomById<FiveRowState>(practice.roomId).state.entry, 0);
+
+    colyseus.sdk.auth.token = "guest-tier-500";
+    const match = await colyseus.sdk.joinOrCreate<FiveRowState>("fiverow", { players: 2, entry: 500, name: "Match" });
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.strictEqual(match.roomId, cheap.roomId, "a 500 seeker joins the open 500 table");
+    assert.strictEqual(await coins("guest-tier-free"), 1000);
+    assert.strictEqual(await coins("guest-tier-500"), 500);
+  });
+
+  it("in a party, Ready is refused when a member cannot afford the leader's tier", async () => {
+    const party = await colyseus.createRoom<PartyState>("party", {});
+    const leader = await connectAs(party, "guest-lead", "Zain");
+    colyseus.sdk.auth.token = "guest-broke";
+    const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Ali", party.state.code));
+    colyseus.sdk.auth.token = "guest-TEST";
+    await party.waitForNextPatch();
+    // Make Ali broke: two 500 tables elsewhere.
+    await getLedger().chargeTableEntry("guest-broke", "elsewhere-1", 500);
+    await getLedger().chargeTableEntry("guest-broke", "elsewhere-2", 500);
+
+    leader.send("set_game", { game: "fiverow", entry: 500 });
+    await party.waitForMessage("set_game");
+    await party.waitForNextPatch();
+    assert.strictEqual(toPartySnapshot(leader.state).entry, 500);
+
+    const refused = nextMessage<{ reason: string }>(friend, "refused");
+    friend.send("set_ready", { ready: true });
+    assert.match((await refused).reason, /need 500 coins/i);
+    assert.strictEqual(party.state.members.get(friend.sessionId).ready, false);
+
+    leader.send("set_ready", { ready: true });
+    await party.waitForMessage("set_ready");
+    await party.waitForNextPatch();
+    assert.strictEqual(party.state.members.get(leader.sessionId).ready, true, "the leader can afford it");
+  });
+
+  it("the wallet endpoints read the balance and pay the daily bonus once", async () => {
+    colyseus.sdk.auth.token = "guest-wallet";
+    const first = await colyseus.sdk.http.get("/wallet");
+    assert.deepStrictEqual(first.data, { balance: 1000, dailyBonusAvailable: true, dailyBonusCoins: 200 });
+    const claimed = await colyseus.sdk.http.post("/wallet/daily", {});
+    assert.deepStrictEqual(claimed.data, { balance: 1200, dailyBonusAvailable: false, dailyBonusCoins: 200 });
+    await assert.rejects(colyseus.sdk.http.post("/wallet/daily", {}), /already claimed|409/i);
+    colyseus.sdk.auth.token = "";
+    await assert.rejects(colyseus.sdk.http.get("/wallet"), /401|sign in/i);
+    colyseus.sdk.auth.token = "guest-TEST";
   });
 });

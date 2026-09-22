@@ -308,6 +308,7 @@ test('toFiveRowSnapshot and boardFromSnapshot round-trip a board', async () => {
     phase: 'playing',
     players: 2,
     teams: 2,
+    entry: 500,
     chips,
     locked: new Array(100).fill(false),
     runs: [{ team: 0, cells: [11, 12, 13, 14, 15] }],

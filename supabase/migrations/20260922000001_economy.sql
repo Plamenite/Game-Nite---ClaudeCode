@@ -134,6 +134,16 @@ exception when unique_violation then
   raise exception 'daily bonus already claimed today' using errcode = 'P0001';
 end $$;
 
+-- Has today's (UTC) bonus been claimed already?
+create or replace function public.daily_bonus_claimed(p_user uuid) returns boolean
+language sql stable as $$
+  select exists (
+    select 1 from public.coin_ledger
+    where user_id = p_user and kind = 'daily_bonus'
+      and idempotency_key = 'daily:' || p_user || ':' || to_char(now() at time zone 'UTC', 'YYYY-MM-DD')
+  );
+$$;
+
 -- One reward per completed ad, at most five per UTC day.
 create or replace function public.reward_ad(p_user uuid, p_ad_id text)
 returns bigint language plpgsql security definer set search_path = public as $$

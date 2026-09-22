@@ -1,5 +1,5 @@
 import { type SeatReservation } from '@colyseus/sdk';
-import { COURT_PIECE_PRIVATE_BEST_OF, COURT_PIECE_VARIANTS, GAMES, isTeamGame } from '@gamenite/game-rules';
+import { COURT_PIECE_PRIVATE_BEST_OF, COURT_PIECE_VARIANTS, GAMES, TABLE_ENTRY_TIERS, isTeamGame } from '@gamenite/game-rules';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -71,6 +71,7 @@ function MenuView({
   cards: ReturnType<typeof useCourtPiece>;
 }) {
   const [code, setCode] = useState('');
+  const [entry, setEntry] = useState<number>(0);
   const theme = useTheme();
   const busy = party.status === 'connecting' || table.status === 'connecting' || cards.status === 'connecting';
   const error = party.error ?? table.error ?? cards.error;
@@ -102,8 +103,18 @@ function MenuView({
         <Button label="Join party" onPress={() => void party.join(code)} disabled={busy || code.trim().length < 6} />
       </ThemedView>
 
-      <Button label={busy ? 'Connecting…' : `Quick play: ${GAMES[0].name} 1 vs 1`} onPress={() => void table.quickPlay(2)} disabled={busy} />
-      <Button label={busy ? 'Connecting…' : 'Quick play: Court Piece (Single Siri)'} onPress={() => void cards.quickPlay('single_siri')} disabled={busy} />
+      <ThemedView type="backgroundElement" style={styles.card}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Quick play with strangers · table entry
+        </ThemedText>
+        <View style={styles.choiceRow}>
+          {TABLE_ENTRY_TIERS.map((tier) => (
+            <Choice key={tier} label={tierLabel(tier)} selected={entry === tier} onPress={() => setEntry(tier)} />
+          ))}
+        </View>
+        <Button label={busy ? 'Connecting…' : `${GAMES[0].name} 1 vs 1`} onPress={() => void table.quickPlay(2, entry)} disabled={busy} />
+        <Button label={busy ? 'Connecting…' : 'Court Piece · Single Siri'} onPress={() => void cards.quickPlay('single_siri', entry)} disabled={busy} />
+      </ThemedView>
     </>
   );
 }
@@ -150,6 +161,14 @@ function PartyView({ party }: { party: ReturnType<typeof useParty> }) {
                 <Choice label={GAMES[0].name} selected={snap.game === 'fiverow'} onPress={() => party.setGame({ game: 'fiverow' })} />
                 <Choice label="Court Piece" selected={snap.game === 'courtpiece'} onPress={() => party.setGame({ game: 'courtpiece' })} />
               </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                Table entry
+              </ThemedText>
+              <View style={styles.choiceRow}>
+                {TABLE_ENTRY_TIERS.map((tier) => (
+                  <Choice key={tier} label={tierLabel(tier)} selected={snap.entry === tier} onPress={() => party.setGame({ game: snap.game, entry: tier })} />
+                ))}
+              </View>
               {snap.game === 'courtpiece' ? (
                 <>
                   <View style={styles.choiceRow}>
@@ -169,6 +188,7 @@ function PartyView({ party }: { party: ReturnType<typeof useParty> }) {
             <ThemedText type="small" themeColor="textSecondary">
               {gameName}
               {snap.game === 'courtpiece' ? ` · ${variantName} · best of ${snap.bestOf}` : ''}
+              {` · entry ${tierLabel(snap.entry)}`}
             </ThemedText>
           )}
         </ThemedView>
@@ -239,6 +259,10 @@ function PartyView({ party }: { party: ReturnType<typeof useParty> }) {
       </View>
     </>
   );
+}
+
+function tierLabel(tier: number): string {
+  return tier === 0 ? 'Free' : tier.toLocaleString();
 }
 
 function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {

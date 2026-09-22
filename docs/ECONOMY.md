@@ -77,3 +77,39 @@ This applies to code, screens, store listings and support pages.
 - **Purchases.** Coin bundles bought through the App Store are credited by
   the server only after receipt validation, with the transaction id as the
   idempotency key. Not built yet.
+
+## Ludo Star as the reference model
+
+The founder wants the economy to follow Ludo Star, a proven casual game
+with the same audience. What Ludo Star does, and where Gamenite stands:
+
+| Ludo Star | Gamenite today | Plan |
+|---|---|---|
+| Coins for table entries, tiers from low to very high | Free, 500, 2,000, 10,000 | Add higher tiers as balances grow; gate them by level later |
+| Winner takes the entries of the losers | Same, minus a 10% table fee | Keep |
+| Daily login bonus that grows with a streak | Flat 200 a day | Streak: day 1 to 7 rising, resets when a day is missed |
+| Free coins for watching short videos | 100 per ad, five a day | Same, live once the ad account exists |
+| Daily spin for coins and gems | Not yet | Free daily spin with fixed, published odds; no real-money spins |
+| Gems: a second, rarer currency for chests, cosmetics, skipping ads | Not yet | Gems for cosmetics and voice minutes; never for table entries |
+| Send and receive gifts with friends (Lucky Dice) | Not yet | Small daily friend gifts once the friends list exists; capped, non-transferable balances |
+| Invite a friend bonus | Not yet | One-time bonus when an invited friend plays a first table |
+| Tournaments and events | Not yet | Later |
+
+Two Ludo Star mechanics we deliberately keep out for the App Store:
+nothing with random rewards is ever bought with real money, and coins are
+never sent between players as a balance transfer. Gifts are small fixed
+bonuses the server grants, not a way to move coins.
+
+## When coins actually move at a table
+
+- The party leader picks the tier along with the game. Quick play shows the
+  tiers as buttons.
+- Tapping **Ready** in a party, or joining quick play, checks the player can
+  afford the tier. If not, the game says how many coins are missing.
+- The entry is charged the moment a seat is taken. If a table never fills
+  and a player leaves, the entry is refunded, and that player cannot
+  re-enter that same table for free.
+- Rematch on a public table charges every seat again; a player who cannot
+  afford it cannot vote for the rematch.
+- Settlement happens once when the match or series ends, using the shared
+  arithmetic, and is recorded once no matter how many times it is retried.

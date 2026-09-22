@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { Room, Client, CloseCode, Delayed } from "colyseus";
+import { Room, Client, CloseCode, Delayed, ServerError } from "colyseus";
 import {
   ABANDONED_MOVE_DELAY_MS,
   BETWEEN_DEALS_MS,
@@ -14,12 +14,14 @@ import {
   cardId,
   createCourtPieceMatch,
   createSeries,
+  isTableEntry,
   legalPlaysFor,
   playCard,
   recordDeal,
   rematch,
   sanitizeDisplayName,
   seatTeam,
+  settleTable,
   type Card,
   type CourtPieceBestOf,
   type CourtPieceMatch,
@@ -27,8 +29,9 @@ import {
   type CourtPieceVariant,
   type PlayResult,
 } from "@gamenite/game-rules";
-import { authenticate } from "../auth.js";
+import { authenticate, type PlayerAuth } from "../auth.js";
 import { isTrustedLaunch } from "../launch.js";
+import { LedgerError, getLedger } from "../ledger.js";
 import { CourtPieceSeat, CourtPieceState, TrickPlay } from "./schema/CourtPieceState.js";
 
 /** Unpredictable dealing: never Math.random on the server. */
@@ -41,6 +44,8 @@ const PLAYERS = 4;
 export interface CourtPieceRoomOptions {
   variant?: CourtPieceVariant;
   bestOf?: CourtPieceBestOf;
+  /** Coins each seat pays: 0, 500, 2000 or 10000. */
+  entry?: number;
   launchSecret?: string;
 }
 
@@ -55,7 +60,7 @@ export interface CourtPieceJoinOptions {
  * handles seats, timers, private hands, the series, and the founder's
  * timeout policy.
  */
-export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { variant: string } }> {
+export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { variant: string; entry: number } }> {
   state = new CourtPieceState();
   maxClients = PLAYERS;
 
@@ -63,6 +68,12 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
   private order: (string | undefined)[] = new Array(PLAYERS).fill(undefined);
   private seatOf = new Map<string, number>();
   private trusted = false;
+  private entry = 0;
+  private userOf = new Map<string, string>();
+  private refunded = new Set<string>();
+  /** Each series (the first, then every rematch) is its own table for the ledger. */
+  private seriesIndex = 1;
+  private settled = false;
   private series: CourtPieceSeries | null = null;
   private match: CourtPieceMatch | null = null;
   private turnTimer?: Delayed;
@@ -88,23 +99,30 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     this.state.variant = variant;
     this.state.bestOf = bestOf;
     this.trusted = isTrustedLaunch(options);
-    await this.setMetadata({ variant });
+    this.entry = isTableEntry(options?.entry) ? Number(options!.entry) : 0;
+    this.state.entry = this.entry;
+    await this.setMetadata({ variant, entry: this.entry });
     // Tests shorten turns through the environment; clients cannot.
     this.turnSeconds = Number(process.env.COURTPIECE_TURN_SECONDS) || TURN_SECONDS;
   }
 
-  onJoin(client: Client, options: CourtPieceJoinOptions | undefined) {
+  async onJoin(client: Client, options: CourtPieceJoinOptions | undefined) {
+    const auth = client.auth as PlayerAuth;
+    const name = sanitizeDisplayName(options?.name);
+    await this.chargeSeat(auth, name);
+
     const wanted = Number(options?.seat);
     const free = this.order.findIndex((id) => id === undefined);
     const seatIndex = this.trusted && Number.isInteger(wanted) && wanted >= 0 && wanted < PLAYERS && this.order[wanted] === undefined ? wanted : free;
 
     const seat = new CourtPieceSeat();
-    seat.name = sanitizeDisplayName(options?.name);
+    seat.name = name;
     seat.seat = seatIndex;
     seat.team = seatTeam(seatIndex);
     this.state.seats.set(client.sessionId, seat);
     this.order[seatIndex] = client.sessionId;
     this.seatOf.set(client.sessionId, seatIndex);
+    this.userOf.set(client.sessionId, auth.userId);
 
     if (this.order.every((id) => id !== undefined)) {
       this.lock();
@@ -134,6 +152,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
       this.state.seats.delete(client.sessionId);
       this.order = this.order.map((id) => (id === client.sessionId ? undefined : id));
       this.seatOf.delete(client.sessionId);
+      void this.refundSeat(client.sessionId);
       this.unlock();
       return;
     }
@@ -186,6 +205,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     this.state.phase = "finished";
     this.state.turnDeadline = 0;
     this.syncSeries();
+    void this.settleCoins(winner);
   }
 
   private afterDeal() {
@@ -194,27 +214,103 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     this.syncSeries();
     if (this.series?.winner !== null) {
       this.state.phase = "finished";
+      void this.settleCoins(this.series!.winner);
       return;
     }
     this.state.phase = "between_deals";
     this.betweenDeals = this.clock.setTimeout(() => this.startDeal(), BETWEEN_DEALS_MS);
   }
 
-  private handleRematch(client: Client) {
+  private async handleRematch(client: Client) {
     if (this.state.phase !== "finished" || !this.series) return this.refuse(client, "The match is still going.");
     const seat = this.state.seats.get(client.sessionId);
     if (!seat || seat.abandoned) return this.refuse(client, "You have left this table.");
+    if (this.entry > 0) {
+      const balance = await getLedger().getBalance(this.userOf.get(client.sessionId) ?? "");
+      if (balance < this.entry) return this.refuse(client, `You need ${this.entry.toLocaleString()} coins for a rematch. You have ${balance.toLocaleString()}.`);
+    }
     seat.wantsRematch = true;
 
     let everyone = true;
     this.state.seats.forEach((s) => { if (s.abandoned || !s.wantsRematch) everyone = false; });
     if (!everyone) return;
 
+    // A rematch is a new table for the ledger: everyone pays again.
+    if (this.entry > 0 && !(await this.chargeEveryone())) return;
+
     this.series = rematch(this.series);
+    this.settled = false;
     this.state.seriesWinner = -1;
     this.state.score0 = 0;
     this.state.score1 = 0;
     this.startDeal();
+  }
+
+  // ------------------------------------------------------------ coins
+
+  private tableKey() {
+    return `${this.roomId}#${this.seriesIndex}`;
+  }
+
+  /** Wallet check and entry charge, BEFORE any seat state changes. Throws to reject the join. */
+  private async chargeSeat(auth: PlayerAuth, name: string) {
+    const ledger = getLedger();
+    await ledger.ensureProfile(auth.userId, name, auth.guest);
+    if (this.entry === 0) return;
+    if (this.refunded.has(auth.userId)) throw new ServerError(403, "You left this table; join another one.");
+    try {
+      await ledger.chargeTableEntry(auth.userId, this.tableKey(), this.entry);
+    } catch (error) {
+      if (error instanceof LedgerError) {
+        const balance = await ledger.getBalance(auth.userId);
+        throw new ServerError(402, `You need ${this.entry.toLocaleString()} coins for this table. You have ${balance.toLocaleString()}.`);
+      }
+      throw error;
+    }
+  }
+
+  private async refundSeat(sessionId: string) {
+    const userId = this.userOf.get(sessionId);
+    this.userOf.delete(sessionId);
+    if (!userId || this.entry === 0) return;
+    this.refunded.add(userId);
+    await getLedger().settleTable(this.tableKey(), [{ playerId: userId, amount: this.entry, kind: "table_refund" }]).catch((e) => console.error("refund failed", e));
+  }
+
+  /** Rematch: charge all four for the new series; undo and abort if anyone falls short. */
+  private async chargeEveryone(): Promise<boolean> {
+    const ledger = getLedger();
+    this.seriesIndex++;
+    const charged: string[] = [];
+    for (const client of this.clients) {
+      const userId = this.userOf.get(client.sessionId);
+      if (!userId) continue;
+      try {
+        await ledger.chargeTableEntry(userId, this.tableKey(), this.entry);
+        charged.push(userId);
+      } catch (error) {
+        if (!(error instanceof LedgerError)) throw error;
+        await ledger.settleTable(this.tableKey(), charged.map((id) => ({ playerId: id, amount: this.entry, kind: "table_refund" as const }))).catch(() => {});
+        const seat = this.state.seats.get(client.sessionId);
+        this.state.seats.forEach((s) => { s.wantsRematch = false; });
+        this.broadcast(COURTPIECE_EVENTS.refused, { reason: `${seat?.name ?? "A player"} cannot afford the rematch.` });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Once per series: winners take the losers' entries minus the fee. */
+  private async settleCoins(winnerTeam: number) {
+    if (this.settled || this.entry === 0) return;
+    this.settled = true;
+    const seats: { playerId: string; team: number }[] = [];
+    this.state.seats.forEach((seat, sessionId) => {
+      const userId = this.userOf.get(sessionId);
+      if (userId) seats.push({ playerId: userId, team: seat.team });
+    });
+    const settlement = settleTable(this.entry, seats, winnerTeam);
+    await getLedger().settleTable(this.tableKey(), settlement.moves).catch((e) => console.error("settlement failed", e));
   }
 
   // ------------------------------------------------------------ turns
