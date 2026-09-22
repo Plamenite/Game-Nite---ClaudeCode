@@ -74,7 +74,8 @@ iOS-first mobile multiplayer board/card game platform.
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
   `packages/game-rules` shared TS rules used by BOTH (ES module).
 - Dev resolves the shared package to SOURCE via tsconfig `paths` (server:
-  tsx watch; app: Metro + `metro.config.js` maps `.js` imports to `.ts`).
+  tsx watch; app: Metro + `metro.config.js` maps `.js` imports to `.ts`
+  and stubs the Node-only `ws` package for the Colyseus client SDK).
   Prod server build uses `dist/`, built by root `postinstall`.
 - `apps/mobile/expo-env.d.ts` is committed on purpose so `tsc` works on a
   fresh clone. Expo regenerates identical content; never edit it.
@@ -82,6 +83,10 @@ iOS-first mobile multiplayer board/card game platform.
   `npm run typecheck`. Windows setup: `scripts/setup-windows.ps1`.
 - Game rules are NOT implemented yet: only card primitives, the game
   catalogue, and fixed facts (Jack eyes, player counts). Spec with founder.
+- Walking skeleton status: `TableRoom` (server) passes a turn around; the
+  app's Table tab joins it via `useTable` with a TEMPORARY guest token
+  (`src/lib/guest.ts`). Contract lives in `game-rules/src/table.ts`.
+  Next: Supabase login replaces the guest token, then the party lobby.
 
 ## 7. Project conventions
 - Founder's machines: Windows PC daily; a ~2024 MacBook Air is available

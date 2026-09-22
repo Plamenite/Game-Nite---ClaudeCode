@@ -1,12 +1,22 @@
 import { Room, Client, CloseCode, Delayed, ServerError, type AuthContext } from "colyseus";
-import { MyRoomState, Player } from "./schema/MyRoomState.js";
+import { SKELETON_TABLE_SEATS, TABLE_MESSAGES, sanitizeDisplayName } from "@gamenite/game-rules";
+import { TableState, Player } from "./schema/TableState.js";
 
 /** How long a player has to act before their turn is skipped. */
 const TURN_DURATION = 15_000;
 
-export class MyRoom extends Room<{ state: MyRoomState }> {
-  maxClients = 2;
-  state = new MyRoomState();
+/** What the phone sends when it joins. */
+export interface TableJoinOptions {
+  name?: string;
+}
+
+/**
+ * One table = one room. The server is the referee: it decides whose turn
+ * it is and ignores anything a phone sends out of turn.
+ */
+export class TableRoom extends Room<{ state: TableState }> {
+  maxClients = SKELETON_TABLE_SEATS;
+  state = new TableState();
 
   private turnTimeout?: Delayed;
 
@@ -15,7 +25,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
      * Ignored unless it is the sender's turn — turn order is the server's to
      * enforce, never the client's to claim.
      */
-    play: (client: Client, message: any) => {
+    [TABLE_MESSAGES.play]: (client: Client, _message: unknown) => {
       if (this.state.currentTurn !== client.sessionId) { return; }
 
       const player = this.state.players.get(client.sessionId);
@@ -26,18 +36,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
   };
 
-  onCreate(options: any) {
+  onCreate(_options: unknown) {
   }
 
-  onJoin(client: Client, options: any) {
-    console.log(client.sessionId, "joined!");
-    this.state.players.set(client.sessionId, new Player());
+  onJoin(client: Client, options: TableJoinOptions) {
+    const player = new Player();
+    player.name = sanitizeDisplayName(options?.name);
+    this.state.players.set(client.sessionId, player);
+    console.log(client.sessionId, "joined as", player.name, "auth:", client.auth?.userId);
 
     if (this.state.players.size === this.maxClients) {
       this.lock(); // full: stop the matchmaker from sending anyone else
       this.nextTurn();
     }
-    console.log("authenticated as", client.auth?.userId);
   }
 
   onLeave(client: Client, code: CloseCode) {
@@ -72,15 +83,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   /**
-   * Called on any disconnection the client did not ask for — a network blip, a
-   * suspended tab, a tunnel change. Holding the seat lets the SDK retry into the
-   * same session, so the player keeps their entity and their place in the room.
+   * Called on any disconnection the client did not ask for — a network blip,
+   * the app going to the background, a Wi-Fi to 4G switch. Holding the seat
+   * lets the SDK retry into the same session, so the player keeps their place.
    */
-  onDrop(client: Client, code: CloseCode) {
+  onDrop(client: Client, _code: CloseCode) {
     // Deliberately not awaited: the framework routes the outcome to onReconnect()
-    // or onLeave() by itself. The catch is only here because the promise also
-    // rejects when the room is already disposing (server shutdown), which would
-    // otherwise surface as an unhandled rejection.
+    // or onLeave() by itself. The catch only silences the rejection that happens
+    // when the room is already disposing (server shutdown).
     this.allowReconnection(client, 30).catch(() => {});
   }
 
@@ -92,17 +102,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
    * Runs at matchmaking time, before a seat is taken and before onJoin().
    * Throwing rejects the join; the return value becomes `client.auth`.
    *
-   * Static, so it does not need a room instance. Use the instance form
-   * (`async onAuth(client, options, context)`) only for checks that need to read
-   * room state — it is skipped whenever the static hook returned a payload.
+   * WALKING SKELETON: the app sends a temporary guest token. Once Supabase
+   * login exists, this verifies a Supabase JWT instead and rejects guests.
    */
-  static async onAuth(token: string, options: any, context: AuthContext) {
+  static async onAuth(token: string, _options: unknown, _context: AuthContext) {
     if (!token) {
       throw new ServerError(401, "missing auth token");
     }
 
-    // TODO: verify the token for real — your API, or JWT.verify() from
-    // @colyseus/auth when this server issued it.
+    // TODO(supabase): verify the token as a Supabase JWT and return its user id.
     return { userId: token };
   }
 }

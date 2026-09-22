@@ -4,6 +4,7 @@
 // import each other with a ".js" suffix even though the sources are ".ts".
 // TypeScript and Node understand that convention; Metro does not. This
 // config teaches Metro: if "./x.js" cannot be found, try "./x.ts" / ".tsx".
+const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
@@ -15,6 +16,15 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     upstreamResolve
       ? upstreamResolve(context, name, platform)
       : context.resolveRequest(context, name, platform);
+
+  // The Colyseus SDK imports the Node-only "ws" package as a fallback but
+  // uses the phone's built-in WebSocket at runtime. Point Metro at ws's own
+  // browser stub so it never tries to bundle Node internals.
+  if (moduleName === 'ws' && platform !== 'web') {
+    // ws hides browser.js behind an exports map, so locate it via package.json.
+    const wsDir = path.dirname(require.resolve('ws/package.json'));
+    return { type: 'sourceFile', filePath: path.join(wsDir, 'browser.js') };
+  }
 
   try {
     return resolve(moduleName);

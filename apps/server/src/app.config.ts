@@ -11,8 +11,8 @@ import {
 /**
  * Import your Room files
  */
-import { MyRoom } from "./rooms/MyRoom.js";
-import { GAMES } from "@gamenite/game-rules";
+import { GAMES, ROOMS } from "@gamenite/game-rules";
+import { TableRoom } from "./rooms/TableRoom.js";
 
 const server = defineServer({
 
@@ -20,7 +20,7 @@ const server = defineServer({
    * Define your room handlers:
    */
   rooms: {
-    my_room: defineRoom(MyRoom).enableRealtimeListing(),
+    [ROOMS.table]: defineRoom(TableRoom).enableRealtimeListing(),
     lobby: defineRoom(LobbyRoom),
   },
 

@@ -43,6 +43,16 @@ Phone and PC must be on the same Wi-Fi for `npm run mobile`. If the phone
 cannot connect, Windows Firewall is usually blocking Node.js; allow it, or
 use the tunnel command.
 
+## Try the walking skeleton (phone talks to server)
+
+1. In one terminal: `npm run server`. Click Allow if Windows Firewall asks.
+2. In another terminal: `npm run mobile`, then open the app on your iPhone.
+3. Open the **Table** tab and tap **Join a table**.
+4. For a second player, press `w` in the mobile terminal to open the app in
+   a browser tab, go to Table there, and join too.
+5. The table fills, the turn starts, and tapping **Tap to play** passes the
+   turn between the two players. The server decides whose turn it is.
+
 ## Tech stack
 
 | Layer | Choice |

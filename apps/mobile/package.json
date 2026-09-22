@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "0.1.0",
   "dependencies": {
+    "@colyseus/sdk": "^0.18.3",
     "@expo/ui": "~57.0.19",
     "@gamenite/game-rules": "*",
     "expo": "~57.0.24",
