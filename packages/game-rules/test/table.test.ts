@@ -1,23 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { sanitizeDisplayName, toTableSnapshot } from '../src/table.js';
+import { ROOMS, sanitizeDisplayName } from '../src/table.js';
 
-test('toTableSnapshot copies live state into plain data in join order', () => {
-  const players = new Map([
-    ['s1', { name: 'Zain', score: 2 }],
-    ['s2', { name: 'Guest', score: 0 }],
-  ]);
-  const snapshot = toTableSnapshot({ players, currentTurn: 's2', turnCount: 3, turnDeadline: 99 });
-  assert.deepEqual(snapshot, {
-    players: [
-      { sessionId: 's1', name: 'Zain', score: 2 },
-      { sessionId: 's2', name: 'Guest', score: 0 },
-    ],
-    currentTurn: 's2',
-    turnCount: 3,
-    turnDeadline: 99,
-  });
+test('room names are stable strings', () => {
+  assert.deepEqual(ROOMS, { party: 'party', fiverow: 'fiverow' });
 });
 
 test('sanitizeDisplayName strips junk, trims, limits length, and falls back', () => {

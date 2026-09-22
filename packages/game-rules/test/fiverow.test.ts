@@ -261,3 +261,67 @@ test('viewForPlayer shows my hand and only counts for others', () => {
   assert.equal(view.players[1].hand?.length, 7);
   assert.equal(view.currentPlayerId, 'a');
 });
+
+// ---------------------------------------------------------------- interview decisions
+
+test('table configs: 2 players, 3 players, and 2 vs 2 only', async () => {
+  const { FIVEROW_TABLE_CONFIGS, fiverowConfigForPlayers } = await import('../src/fiverow.js');
+  assert.deepEqual(FIVEROW_TABLE_CONFIGS.map((c) => [c.players, c.teams]), [[2, 2], [3, 3], [4, 2]]);
+  assert.equal(fiverowConfigForPlayers(3)?.id, '3p');
+  assert.equal(fiverowConfigForPlayers(5), null);
+  assert.equal(fiverowConfigForPlayers(6), null);
+});
+
+test('a player with no legal move must pass; otherwise passing is refused', async () => {
+  const { mustPass, passTurn, randomLegalMove } = await import('../src/fiverow-match.js');
+  let match: FiveRowMatch = createFiveRowMatch(['a', 'b'], { teams: 2 }, fixedRandom);
+  assert.equal(mustPass(match, 'a'), false);
+  assert.throws(() => passTurn(match, 'a'), IllegalMoveError);
+
+  // Rig: 'a' holds nothing at all.
+  match.players[0].hand = [];
+  assert.equal(mustPass(match, 'a'), true);
+  assert.equal(mustPass(match, 'b'), false, 'not their turn');
+  assert.equal(randomLegalMove(match, 'a', fixedRandom), null);
+  const passed = passTurn(match, 'a');
+  assert.equal(currentPlayer(passed).id, 'b');
+});
+
+test('randomLegalMove prefers a board move over a dead-card exchange', async () => {
+  const { randomLegalMove } = await import('../src/fiverow-match.js');
+  let match: FiveRowMatch = createFiveRowMatch(['a', 'b'], { teams: 2 }, fixedRandom);
+  const dead: Card = { rank: '9', suit: 'hearts' };
+  match = { ...match, board: boardWithChips([...cellsForCard(dead)], 1) };
+  match.players[0].hand = [dead, J_DIAMONDS];
+  const move = randomLegalMove(match, 'a', fixedRandom)!;
+  assert.equal(move.kind, 'place');
+
+  match.players[0].hand = [dead];
+  assert.equal(randomLegalMove(match, 'a', fixedRandom)!.kind, 'exchangeDead');
+});
+
+test('toFiveRowSnapshot and boardFromSnapshot round-trip a board', async () => {
+  const { toFiveRowSnapshot, boardFromSnapshot, NO_CHIP } = await import('../src/fiverow-table.js');
+  const chips = new Array(100).fill(NO_CHIP);
+  chips[11] = 0;
+  const state = {
+    phase: 'playing',
+    players: 2,
+    teams: 2,
+    chips,
+    locked: new Array(100).fill(false),
+    runs: [{ team: 0, cells: [11, 12, 13, 14, 15] }],
+    seats: new Map([['s1', { name: 'Zain', team: 0, handCount: 7, timeouts: 0, abandoned: false, connected: true }]]),
+    turnSessionId: 's1',
+    turnDeadline: 123,
+    exchangedThisTurn: false,
+    winnerTeam: NO_CHIP,
+    drawPileCount: 90,
+  };
+  const snap = toFiveRowSnapshot(state);
+  assert.equal(snap.seats[0].sessionId, 's1');
+  assert.deepEqual(snap.runs[0].cells, [11, 12, 13, 14, 15]);
+  const board = boardFromSnapshot(snap);
+  assert.equal(board.chips[11], 0);
+  assert.equal(board.chips[12], null);
+});

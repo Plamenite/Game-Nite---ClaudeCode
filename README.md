@@ -48,7 +48,7 @@ Phone and PC must be on the same Wi-Fi for `npm run mobile`. If the phone
 cannot connect, Windows Firewall is usually blocking Node.js; allow it, or
 use the tunnel command.
 
-## Try the walking skeleton (party → table, phone talks to server)
+## Try it: party → a real game (phone talks to server)
 
 1. In one terminal: `npm run server`. Click Allow if Windows Firewall asks.
 2. In another terminal: `npm run mobile`, then open the app on your iPhone.
@@ -57,10 +57,13 @@ use the tunnel command.
 4. For a second player, press `w` in the mobile terminal to open the app in
    a browser tab, go to Play, type the code, and tap **Join party**.
 5. Both tap **Ready**. The leader (★) taps **Launch**. Everyone lands at the
-   same table and **Tap to play** passes the turn around. The server
-   decides whose turn it is; tapping out of turn does nothing.
+   same Five Row table with seven private cards.
+6. On your turn, pick a card, then tap a highlighted space. A two-eyed Jack
+   goes anywhere open; a one-eyed Jack removes an opponent's chip. A dead
+   card (both spaces taken) can be swapped once per turn. Thirty seconds per
+   turn; if you run out, the server plays a random legal card for you.
 
-**Quick play** skips the party and seats you at any open table.
+**Quick play: 1 vs 1** skips the party and seats you at any open 1v1 table.
 
 Low on disk space? Use slim setup: it skips VS Code and clears the npm cache.
 

@@ -66,3 +66,43 @@ export function fiverowRunsToWin(teams: number): number {
   if (teams === 3) return 1;
   throw new RangeError(`Five Row is played with 2 or 3 teams, not ${teams}`);
 }
+
+// ---------------------------------------------------------------------------
+// Product decisions from the rules interview (founder, 2026-09-22)
+// ---------------------------------------------------------------------------
+
+/** A table shape we offer. `teams` of equal size; players seat alternately. */
+export interface FiveRowTableConfig {
+  id: '2p' | '3p' | '2v2';
+  label: string;
+  players: number;
+  teams: number;
+}
+
+/** Launch tables: 2 players, 3 players, and 2 versus 2. Nothing bigger yet. */
+export const FIVEROW_TABLE_CONFIGS: readonly FiveRowTableConfig[] = [
+  { id: '2p', label: '1 vs 1', players: 2, teams: 2 },
+  { id: '3p', label: '3 players', players: 3, teams: 3 },
+  { id: '2v2', label: '2 vs 2', players: 4, teams: 2 },
+];
+
+export const FIVEROW_MAX_PLAYERS = 4;
+
+/** The table shape for a party of this size, or null if none fits. */
+export function fiverowConfigForPlayers(playerCount: number): FiveRowTableConfig | null {
+  return FIVEROW_TABLE_CONFIGS.find((c) => c.players === playerCount) ?? null;
+}
+
+/** Seconds a player gets per turn. PLACEHOLDER until the founder tunes it. */
+export const FIVEROW_TURN_SECONDS = 30;
+
+/**
+ * When the timer runs out the server plays a random legal card for the
+ * player. After this many timeouts IN A ROW the seat counts as abandoned:
+ * it is auto-played instantly from then on, and if only one team still has
+ * a present player, that team wins.
+ */
+export const FIVEROW_TIMEOUTS_TO_ABANDON = 3;
+
+/** Small pause before an abandoned seat's automatic move, so others can follow. */
+export const FIVEROW_ABANDONED_MOVE_DELAY_MS = 700;

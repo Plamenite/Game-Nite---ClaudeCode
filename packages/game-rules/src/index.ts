@@ -4,6 +4,7 @@ export * from './fiverow.js';
 export * from './fiverow-board.js';
 export * from './fiverow-rules.js';
 export * from './fiverow-match.js';
+export * from './fiverow-table.js';
 export * from './court-piece.js';
 export * from './table.js';
 export * from './party.js';

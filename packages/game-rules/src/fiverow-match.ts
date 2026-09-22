@@ -169,6 +169,39 @@ export function playMove(match: FiveRowMatch, playerId: string, move: FiveRowMov
   return { match: next, newRuns: result.newRuns };
 }
 
+/**
+ * A player with no legal move at all (every card dead and the exchange
+ * already used, or an empty hand) must pass so the game cannot stall.
+ */
+export function mustPass(match: FiveRowMatch, playerId: string): boolean {
+  if (match.winner !== null || match.stalemate) return false;
+  return currentPlayer(match).id === playerId && legalMoves(match, playerId).length === 0;
+}
+
+export function passTurn(match: FiveRowMatch, playerId: string): FiveRowMatch {
+  if (!mustPass(match, playerId)) {
+    throw new IllegalMoveError(`${playerId} may not pass while a legal move exists`);
+  }
+  return {
+    ...match,
+    turn: (match.turn + 1) % match.players.length,
+    exchangedThisTurn: false,
+  };
+}
+
+/**
+ * The move the server plays for a player whose timer ran out: a random
+ * board move when one exists, otherwise a dead-card exchange, otherwise
+ * null (the player must pass).
+ */
+export function randomLegalMove(match: FiveRowMatch, playerId: string, random: RandomSource): FiveRowMove | null {
+  const moves = legalMoves(match, playerId);
+  const boardMoves = moves.filter((m) => m.kind !== 'exchangeDead');
+  const pool = boardMoves.length > 0 ? boardMoves : moves;
+  if (pool.length === 0) return null;
+  return pool[Math.floor(random() * pool.length)];
+}
+
 function sameMove(a: FiveRowMove, b: FiveRowMove): boolean {
   if (a.kind !== b.kind || cardId(a.card) !== cardId(b.card)) return false;
   if (a.kind === 'exchangeDead' || b.kind === 'exchangeDead') return true;

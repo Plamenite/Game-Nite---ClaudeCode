@@ -65,9 +65,8 @@ iOS-first mobile multiplayer board/card game platform.
   username) plus Facebook friends as an importer on top.
 - Party (DECIDED): PUBG style. Leader creates a party with a join code,
   friends join by code, each taps Ready, ONLY the leader launches.
-- Proposed, not yet decided: AdMob for ads, RevenueCat for IAP/VIP.
 - Bundle id `app.plamenite.gamenite` (iOS + Android); domain plamenite.app,
-  spelling CONFIRMED by founder 2026-09-22.
+  spelling CONFIRMED 2026-09-22. Proposed, undecided: AdMob ads, RevenueCat IAP.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
@@ -79,14 +78,15 @@ iOS-first mobile multiplayer board/card game platform.
 - `apps/mobile/expo-env.d.ts` is committed so `tsc` works on a fresh clone.
 - Root: `npm run mobile|server|test|typecheck`; CI runs the last two on
   every push. Windows setup: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
-- Five Row rules core DONE (`game-rules/src/fiverow-*.ts`): our OWN board
-  layout (never regenerate casually), moves, Jacks, dead cards, runs with
-  the one-shared-chip rule, pure match engine, 27 tests. Standard hand sizes
-  and runs-to-win pending the rules interview; not wired to a room. Court
-  Piece rules: not started.
+- Five Row is LIVE end to end: pure engine `game-rules/src/fiverow-*.ts`
+  (own board layout, never regenerate casually), `FiveRowRoom` (hands sent
+  privately, crypto RNG, 30 s turns = PLACEHOLDER, timeout → random legal
+  move, 3 in a row → seat abandoned, last team present wins), phone board
+  `components/fiverow-board.tsx`. Interview (DECIDED): tables 1v1, 3 players,
+  2v2; standard hand sizes and runs-to-win. Court Piece rules: not started.
 - Walking skeleton (done, pre-login): `PartyRoom` (create/join by code,
-  Ready, leader-only launch → seat reservations in a `TableRoom` turn
-  demo). App: Play tab (`use-party`/`use-table`), TEMPORARY guest token in
+  Ready, leader-only launch → seat reservations in a `FiveRowRoom`). App:
+  Play tab (`use-party`/`use-fiverow`), TEMPORARY guest token in
   `src/lib/guest.ts`. Server verifies Supabase JWTs (`src/auth.ts`; guests
   only with ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
 - Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches

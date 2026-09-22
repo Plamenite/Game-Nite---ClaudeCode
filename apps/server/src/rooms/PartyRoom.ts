@@ -6,6 +6,7 @@ import {
   ROOMS,
   SKELETON_PARTY_SIZE,
   canLaunchParty,
+  fiverowConfigForPlayers,
   generatePartyCode,
   normalizePartyCode,
   sanitizeDisplayName,
@@ -104,9 +105,15 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
       return this.refuse(leader, "Everyone must be ready first.");
     }
 
+    // For now every party plays Five Row; a game picker comes with Court Piece.
+    const config = fiverowConfigForPlayers(members.length);
+    if (!config) {
+      return this.refuse(leader, "Five Row needs 2, 3 or 4 players.");
+    }
+
     this.state.status = "launching";
     try {
-      const table = await matchMaker.createRoom(ROOMS.table, { seats: members.length });
+      const table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players });
 
       // Reserve one seat per member and hand each phone its own reservation.
       for (const client of this.clients) {

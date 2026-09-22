@@ -1,11 +1,20 @@
 import assert from "assert";
 import { ColyseusTestServer, boot } from "@colyseus/testing";
-import { partyJoinOptions, toPartySnapshot, toTableSnapshot } from "@gamenite/game-rules";
+import {
+  NO_CHIP,
+  boardFromSnapshot,
+  movesForCard,
+  partyJoinOptions,
+  toFiveRowSnapshot,
+  toPartySnapshot,
+  type Card,
+  type FiveRowMove,
+} from "@gamenite/game-rules";
 
 import appConfig from "../src/app.config.js";
 import { configureAuth } from "../src/auth.js";
+import { FiveRowState } from "../src/rooms/schema/FiveRowState.js";
 import { PartyState } from "../src/rooms/schema/PartyState.js";
-import { TableState } from "../src/rooms/schema/TableState.js";
 
 /**
  * All room tests share ONE booted test server. Booting a second server in
@@ -35,50 +44,128 @@ function nextMessage<T = any>(room: { onMessage: any }, type: string, timeoutMs 
   });
 }
 
-describe("TableRoom (walking skeleton)", () => {
-  it("only lets the current player act", async () => {
-    const room = await colyseus.createRoom<TableState>("table", {});
-    const client1 = await colyseus.connectTo(room, { name: "  Zain <b>  " });
-    const client2 = await colyseus.connectTo(room, { name: "" });
+/** Poll until a condition holds, or fail. */
+async function waitFor(check: () => boolean, timeoutMs = 5000, label = "condition") {
+  const started = Date.now();
+  while (!check()) {
+    if (Date.now() - started > timeoutMs) throw new Error(`timed out waiting for ${label}`);
+    await new Promise((r) => setTimeout(r, 40));
+  }
+}
 
-    assert.strictEqual(room.state.players.get(client1.sessionId).name, "Zain b", "names are sanitized");
-    assert.strictEqual(room.state.players.get(client2.sessionId).name, "Guest", "empty name falls back");
+/** Ask the room for my hand the way the phone does after registering handlers. */
+async function fetchHand(client: { onMessage: any; send: any }): Promise<Card[]> {
+  const hand = nextMessage<{ cards: Card[] }>(client, "hand");
+  client.send("sync", {});
+  return (await hand).cards;
+}
 
-    assert.strictEqual(room.state.currentTurn, client1.sessionId, "first joiner starts");
+describe("FiveRowRoom (a live game)", () => {
+  it("quick play seats two guests, deals seven private cards each, and starts the first turn", async () => {
+    const room = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2 });
+    assert.strictEqual(room.maxClients, 2);
 
-    // out of turn: ignored
-    client2.send("play", {});
-    await room.waitForMessage("play");
-    assert.strictEqual(room.state.players.get(client2.sessionId).score, 0);
-    assert.strictEqual(room.state.currentTurn, client1.sessionId);
+    const c1 = await colyseus.connectTo(room, { name: "Zain" });
+    assert.strictEqual(room.state.phase, "waiting");
+    const c2 = await colyseus.connectTo(room, { name: "Friend" });
+    await waitFor(() => room.state.phase === "playing", 3000, "match start");
+    await room.waitForNextPatch();
 
-    // in turn: counted, and the turn passes on
-    client1.send("play", {});
-    await room.waitForMessage("play");
-    assert.strictEqual(room.state.players.get(client1.sessionId).score, 1);
-    assert.strictEqual(room.state.currentTurn, client2.sessionId);
+    const snap = toFiveRowSnapshot(c2.state);
+    assert.strictEqual(snap.chips.length, 100);
+    assert.ok(snap.chips.every((c) => c === NO_CHIP));
+    assert.deepStrictEqual(snap.seats.map((s) => [s.name, s.team, s.handCount]), [["Zain", 0, 7], ["Friend", 1, 7]]);
+    assert.strictEqual(snap.turnSessionId, c1.sessionId);
+    assert.strictEqual(snap.drawPileCount, 104 - 14);
+    assert.ok(snap.turnDeadline > 0);
+
+    const hand1 = await fetchHand(c1);
+    const hand2 = await fetchHand(c2);
+    assert.strictEqual(hand1.length, 7);
+    assert.strictEqual(hand2.length, 7);
+    assert.ok(hand1.every((c) => typeof c.rank === "string" && typeof c.suit === "string"));
   });
-  it("phone-side snapshots match the server and agree between players", async () => {
-    const room = await colyseus.createRoom<TableState>("table", {});
-    const client1 = await colyseus.connectTo(room, { name: "Zain" });
-    const client2 = await colyseus.connectTo(room, { name: "Friend" });
-    // client1 learns about client2 in the next state update; wait for it.
+
+  it("a legal move places a chip and passes the turn; illegal and out-of-turn moves are refused", async () => {
+    const room = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2 });
+    const c1 = await colyseus.connectTo(room, { name: "Zain" });
+    const c2 = await colyseus.connectTo(room, { name: "Friend" });
+    await waitFor(() => room.state.phase === "playing", 3000, "match start");
     await room.waitForNextPatch();
 
-    // Both phones see the same table, in join order, with sanitized names.
-    const view1 = toTableSnapshot(client1.state);
-    const view2 = toTableSnapshot(client2.state);
-    assert.deepStrictEqual(view1, view2);
-    assert.deepStrictEqual(view1.players.map((p) => p.name), ["Zain", "Friend"]);
-    assert.strictEqual(view1.currentTurn, client1.sessionId);
+    // Out of turn: refused.
+    const refused = nextMessage<{ reason: string }>(c2, "refused");
+    c2.send("move", { kind: "place", card: { rank: "A", suit: "spades" }, cell: 11 });
+    assert.match((await refused).reason, /not allowed/i);
 
-    // A play by the current player shows up on the other phone.
-    client1.send("play", {});
-    await room.waitForMessage("play");
+    // Nonsense payload: refused, not crashed.
+    const refusedJunk = nextMessage<{ reason: string }>(c1, "refused");
+    c1.send("move", { kind: "place" });
+    assert.match((await refusedJunk).reason, /not valid/i);
+
+    // A real legal move from the current player, found the way the phone finds it.
+    const hand = await fetchHand(c1);
+    const board = boardFromSnapshot(toFiveRowSnapshot(c1.state));
+    let move: FiveRowMove | undefined;
+    for (const card of hand) {
+      const [first] = movesForCard(board, card, 0);
+      if (first) { move = first; break; }
+    }
+    assert.ok(move, "a fresh hand always has a placeable card");
+    const newHand = nextMessage<{ cards: Card[] }>(c1, "hand");
+    c1.send("move", move);
+    await room.waitForMessage("move");
     await room.waitForNextPatch();
-    const after = toTableSnapshot(client2.state);
-    assert.strictEqual(after.players.find((p) => p.sessionId === client1.sessionId)?.score, 1);
-    assert.strictEqual(after.currentTurn, client2.sessionId);
+
+    const snap = toFiveRowSnapshot(c2.state);
+    assert.strictEqual(snap.chips[(move as { cell: number }).cell], 0, "team 0 chip placed");
+    assert.strictEqual(snap.turnSessionId, c2.sessionId, "turn passed");
+    assert.strictEqual(snap.seats[0].handCount, 7, "drew a replacement");
+    assert.strictEqual(snap.drawPileCount, 104 - 14 - 1);
+    assert.strictEqual((await newHand).cards.length, 7);
+  });
+
+  it("a slow player is auto-played; three timeouts in a row abandon the seat and the opponent wins", async () => {
+    process.env.FIVEROW_TURN_SECONDS = "0.25";
+    try {
+      const room = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2 });
+      await colyseus.connectTo(room, { name: "Zain" });
+      const c2 = await colyseus.connectTo(room, { name: "Friend" });
+      await waitFor(() => room.state.phase === "playing", 3000, "match start");
+
+      // Nobody moves. Turns alternate by auto-play: Zain times out at 0.25s, Friend at 0.5s, ...
+      await waitFor(() => room.state.chips.some((c) => c !== NO_CHIP), 3000, "an automatic move");
+      await waitFor(() => room.state.phase === "finished", 6000, "abandonment");
+
+      const snap = toFiveRowSnapshot(c2.state);
+      assert.strictEqual(snap.phase, "finished");
+      const zain = snap.seats.find((s) => s.name === "Zain")!;
+      assert.strictEqual(zain.timeouts, 3);
+      assert.strictEqual(zain.abandoned, true);
+      assert.strictEqual(snap.winnerTeam, 1, "the friend's team wins");
+    } finally {
+      delete process.env.FIVEROW_TURN_SECONDS;
+    }
+  });
+
+  it("leaving mid-game hands the win to the remaining team", async () => {
+    const room = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2 });
+    const c1 = await colyseus.connectTo(room, { name: "Zain" });
+    const c2 = await colyseus.connectTo(room, { name: "Friend" });
+    await waitFor(() => room.state.phase === "playing", 3000, "match start");
+
+    await c1.leave(true);
+    await waitFor(() => room.state.phase === "finished", 3000, "forfeit");
+    await room.waitForNextPatch().catch(() => {});
+    assert.strictEqual(room.state.winnerTeam, 1);
+    assert.strictEqual(toFiveRowSnapshot(c2.state).seats.find((s) => s.name === "Zain")?.abandoned, true);
+  });
+
+  it("quick play never seats a 1v1 seeker at a 2v2 table", async () => {
+    const big = await colyseus.createRoom<FiveRowState>("fiverow", { players: 4 });
+    const seeker = await colyseus.sdk.joinOrCreate<FiveRowState>("fiverow", { players: 2, name: "Solo" });
+    assert.notStrictEqual(seeker.roomId, big.roomId);
+    assert.strictEqual(colyseus.getRoomById(seeker.roomId).maxClients, 2);
   });
 });
 
@@ -120,19 +207,17 @@ describe("PartyRoom (walking skeleton)", () => {
     const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Friend", party.state.code));
     await party.waitForNextPatch();
 
-    // Friend tries to launch: refused.
     const refused1 = nextMessage<{ reason: string }>(friend, "refused");
     friend.send("launch", {});
     assert.match((await refused1).reason, /leader/i);
 
-    // Leader launches before everyone is ready: refused.
     const refused2 = nextMessage<{ reason: string }>(leader, "refused");
     leader.send("launch", {});
     assert.match((await refused2).reason, /ready/i);
     assert.strictEqual(party.state.status, "open");
   });
 
-  it("launch creates a table and seats every member via reservations", async () => {
+  it("launch opens a Five Row table sized to the party and seats every member", async () => {
     const party = await colyseus.createRoom<PartyState>("party", {});
     const leader = await colyseus.connectTo(party, { name: "Zain" });
     const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Friend", party.state.code));
@@ -150,19 +235,19 @@ describe("PartyRoom (walking skeleton)", () => {
     leader.send("launch", {});
     const [seatA, seatB] = await Promise.all([leaderSeat, friendSeat]);
     assert.strictEqual(seatA.roomId, seatB.roomId, "same table for both");
-    assert.notStrictEqual(seatA.sessionId, seatB.sessionId);
     assert.strictEqual(party.state.status, "launched");
 
-    // Each phone takes its reserved seat.
-    const tableA = await colyseus.sdk.consumeSeatReservation<TableState>(seatA);
-    const tableB = await colyseus.sdk.consumeSeatReservation<TableState>(seatB);
-    const table = colyseus.getRoomById(seatA.roomId);
+    const tableA = await colyseus.sdk.consumeSeatReservation<FiveRowState>(seatA);
+    const tableB = await colyseus.sdk.consumeSeatReservation<FiveRowState>(seatB);
+    const table = colyseus.getRoomById<FiveRowState>(seatA.roomId);
+    await waitFor(() => table.state.phase === "playing", 3000, "match start");
     await table.waitForNextPatch();
 
-    const view = toTableSnapshot(tableA.state);
-    assert.deepStrictEqual(view.players.map((p) => p.name).sort(), ["Friend", "Zain"]);
     assert.strictEqual(table.maxClients, 2, "table sized to the party");
-    assert.ok(view.currentTurn, "the turn starts once every seat is taken");
-    assert.deepStrictEqual(toTableSnapshot(tableB.state).players, view.players);
+    const view = toFiveRowSnapshot(tableA.state);
+    assert.deepStrictEqual(view.seats.map((s) => s.name).sort(), ["Friend", "Zain"]);
+    assert.ok(view.turnSessionId, "the first turn has started");
+    assert.deepStrictEqual(toFiveRowSnapshot(tableB.state).seats, view.seats);
+    assert.strictEqual((await fetchHand(tableA)).length, 7);
   });
 });

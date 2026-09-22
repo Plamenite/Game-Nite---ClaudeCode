@@ -1,28 +1,30 @@
 import { type SeatReservation } from '@colyseus/sdk';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { FiveRowBoard } from '@/components/fiverow-board';
+import { useFiveRow } from '@/hooks/use-fiverow';
 import { useParty } from '@/hooks/use-party';
-import { useTable } from '@/hooks/use-table';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
- * WALKING SKELETON "Play" screen, three phases:
+ * "Play" screen, three phases:
  *   menu  → create a party, join one by code, or quick play
  *   party → see friends, tap Ready, leader taps Launch
- *   table → the launched table (turn passing demo)
+ *   table → a live Five Row game
  */
 export default function PlayScreen() {
-  const table = useTable();
+  const table = useFiveRow();
+  const { joinWithReservation } = table;
   const onTableReady = useCallback(
     (reservation: SeatReservation) => {
-      void table.joinWithReservation(reservation);
+      void joinWithReservation(reservation);
     },
-    [table],
+    [joinWithReservation],
   );
   const party = useParty({ onTableReady });
 
@@ -33,7 +35,7 @@ export default function PlayScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         {atTable ? (
-          <TableView table={table} onLeft={() => void party.leave()} />
+          <GameView table={table} onLeft={() => void party.leave()} />
         ) : inParty ? (
           <PartyView party={party} />
         ) : (
@@ -46,7 +48,7 @@ export default function PlayScreen() {
 
 // ---------------------------------------------------------------- menu
 
-function MenuView({ party, table }: { party: ReturnType<typeof useParty>; table: ReturnType<typeof useTable> }) {
+function MenuView({ party, table }: { party: ReturnType<typeof useParty>; table: ReturnType<typeof useFiveRow> }) {
   const [code, setCode] = useState('');
   const theme = useTheme();
   const busy = party.status === 'connecting' || table.status === 'connecting';
@@ -79,7 +81,7 @@ function MenuView({ party, table }: { party: ReturnType<typeof useParty>; table:
         <Button label="Join party" onPress={() => void party.join(code)} disabled={busy || code.trim().length < 6} />
       </ThemedView>
 
-      <Button label={busy ? 'Connecting…' : 'Quick play (any open table)'} onPress={() => void table.join()} disabled={busy} />
+      <Button label={busy ? 'Connecting…' : 'Quick play: 1 vs 1'} onPress={() => void table.quickPlay(2)} disabled={busy} />
     </>
   );
 }
@@ -155,71 +157,43 @@ function PartyView({ party }: { party: ReturnType<typeof useParty> }) {
   );
 }
 
-// ---------------------------------------------------------------- table
+// ---------------------------------------------------------------- game
 
-const TABLE_STATUS = {
-  idle: 'Not connected',
-  connecting: 'Taking your seat…',
-  seated: 'Seated at the table',
-  left: 'Left the table',
-  error: 'Could not connect',
-} as const;
+function GameView({ table, onLeft }: { table: ReturnType<typeof useFiveRow>; onLeft: () => void }) {
+  const { status, snapshot, hand, error, notice, sessionId, clockOffset, sendMove, pass, leave } = table;
 
-function TableView({ table, onLeft }: { table: ReturnType<typeof useTable>; onLeft: () => void }) {
-  const { status, snapshot, error, sessionId, leave, play } = table;
-  const seated = status === 'seated';
-  const myTurn = seated && snapshot?.currentTurn === sessionId;
-  const started = (snapshot?.turnCount ?? 0) > 0;
+  const doLeave = () => {
+    void leave();
+    onLeft();
+  };
+
+  if (status === 'connecting' || !snapshot) {
+    return (
+      <>
+        <ThemedText type="subtitle">Table</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Taking your seat…
+        </ThemedText>
+        {error ? <ThemedText type="small">{error}</ThemedText> : null}
+        <Button label="Cancel" onPress={doLeave} />
+      </>
+    );
+  }
 
   return (
-    <>
-      <ThemedText type="subtitle">Table</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {TABLE_STATUS[status]}
-      </ThemedText>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       {error ? <ThemedText type="small">{error}</ThemedText> : null}
-
-      <ThemedView type="backgroundElement" style={styles.card}>
-        {snapshot && snapshot.players.length > 0 ? (
-          snapshot.players.map((player) => {
-            const isMe = player.sessionId === sessionId;
-            const isTurn = player.sessionId === snapshot.currentTurn;
-            return (
-              <View key={player.sessionId} style={styles.row}>
-                <ThemedText type={isTurn ? 'smallBold' : 'small'}>
-                  {isTurn ? '▶ ' : '  '}
-                  {player.name}
-                  {isMe ? ' (you)' : ''}
-                </ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {player.score} taps
-                </ThemedText>
-              </View>
-            );
-          })
-        ) : (
-          <ThemedText type="small" themeColor="textSecondary">
-            Waiting for the table…
-          </ThemedText>
-        )}
-        {seated && !started && snapshot && snapshot.players.length > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            The turn starts when every seat is taken.
-          </ThemedText>
-        ) : null}
-      </ThemedView>
-
-      <View style={styles.buttons}>
-        <Button label={myTurn ? 'Tap to play' : 'Wait for your turn'} onPress={play} disabled={!myTurn} />
-        <Button
-          label="Leave table"
-          onPress={() => {
-            void leave();
-            onLeft();
-          }}
-        />
-      </View>
-    </>
+      <FiveRowBoard
+        snapshot={snapshot}
+        hand={hand}
+        mySessionId={sessionId}
+        clockOffset={clockOffset}
+        notice={notice}
+        onMove={sendMove}
+        onPass={pass}
+        onLeave={doLeave}
+      />
+    </ScrollView>
   );
 }
 
@@ -240,6 +214,14 @@ function Button({ label, onPress, disabled }: { label: string; onPress: () => vo
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    alignSelf: 'stretch',
+  },
+  scrollContent: {
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingBottom: Spacing.five,
+  },
   container: {
     flex: 1,
     flexDirection: 'row',
