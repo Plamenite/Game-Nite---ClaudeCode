@@ -3,6 +3,7 @@ import { ColyseusTestServer, boot } from "@colyseus/testing";
 import { partyJoinOptions, toPartySnapshot, toTableSnapshot } from "@gamenite/game-rules";
 
 import appConfig from "../src/app.config.js";
+import { configureAuth } from "../src/auth.js";
 import { PartyState } from "../src/rooms/schema/PartyState.js";
 import { TableState } from "../src/rooms/schema/TableState.js";
 
@@ -13,13 +14,17 @@ import { TableState } from "../src/rooms/schema/TableState.js";
  */
 let colyseus: ColyseusTestServer<typeof appConfig>;
 
-before(async () => colyseus = await boot(appConfig));
+before(async () => {
+  // Rooms are tested with the app's pre-login guest tokens.
+  configureAuth({ allowGuestTokens: true, verifier: null });
+  colyseus = await boot(appConfig);
+});
 after(async () => colyseus.shutdown());
 
 beforeEach(async () => {
   await colyseus.cleanup();
   // cleanup() signs the SDK out, so the token is set per test, not once.
-  colyseus.sdk.auth.token = "test-user";
+  colyseus.sdk.auth.token = "guest-TEST";
 });
 
 /** Resolve with the next message of this type, or fail the test after a while. */

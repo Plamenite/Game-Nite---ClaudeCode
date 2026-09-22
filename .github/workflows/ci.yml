@@ -1,0 +1,32 @@
+# Runs on every push and pull request. Gives the branch a green check on
+# GitHub when the code type-checks and all tests pass, so nobody has to
+# run anything by hand to know the project is healthy.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install packages (also builds the shared rules package)
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck all three parts
+        run: npm run typecheck
+
+      - name: Run all tests
+        run: npm test

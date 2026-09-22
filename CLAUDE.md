@@ -62,7 +62,8 @@ iOS-first mobile multiplayer board/card game platform.
   is SQL: one row per coin movement, written ONLY by the server.
 - Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Sign in
   with Apple (required by Apple when any social login exists), Google,
-  Facebook (needs a Meta developer app + data-deletion URL).
+  Facebook incl. Facebook friends who also play (`user_friends`, needs
+  Meta App Review + data-deletion URL). Setup guide: `docs/ACCOUNTS.md`.
 - Party (DECIDED): PUBG style. Leader creates a party with a join code,
   friends join by code, each taps Ready, ONLY the leader launches.
 - Proposed, not yet decided: AdMob for ads, RevenueCat for IAP/VIP.
@@ -76,24 +77,23 @@ iOS-first mobile multiplayer board/card game platform.
   tsx watch; app: Metro + `metro.config.js`, which maps `.js` imports to
   `.ts` and stubs Node-only `ws`). Prod server build uses `dist/`, built
   by root `postinstall`.
-- `apps/mobile/expo-env.d.ts` is committed on purpose so `tsc` works on a
-  fresh clone. Expo regenerates identical content; never edit it.
-- Root: `npm run mobile|server|test|typecheck`. Windows setup:
-  `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1` skips VS Code, clears cache).
+- `apps/mobile/expo-env.d.ts` is committed so `tsc` works on a fresh clone.
+- Root: `npm run mobile|server|test|typecheck`; CI runs the last two on
+  every push. Windows setup: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
 - Game rules are NOT implemented yet: only card primitives, the game
   catalogue, and fixed facts (Jack eyes, player counts). Spec with founder.
 - Walking skeleton (done, pre-login): `PartyRoom` (create/join by code,
   Ready, leader-only launch → reserves seats in a `TableRoom` that passes
   a turn around). App: Play tab via `use-party`/`use-table`; TEMPORARY
   guest token in `src/lib/guest.ts`. Contracts: `game-rules/src/party.ts`
-  and `table.ts`. Next: Supabase login replaces the guest token.
+  and `table.ts`. Server already verifies Supabase JWTs (`src/auth.ts`,
+  JWKS or HS256; guests only with ALLOW_GUEST_TOKENS=true, dev only).
+  Next: app login screen once the founder's accounts exist.
 - Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches
-  `metadata.code` (driver checks top-level fields then metadata, plain
-  keys only, no dot notation). All room tests share ONE booted test server
-  in `test/rooms.test.ts`; a second boot per file breaks matchmaking.
+  `metadata.code` (plain keys, no dot notation). Room tests share ONE booted
+  test server in `test/rooms.test.ts`; two boots per process break it.
 
 ## 7. Project conventions
-- Founder: Windows PC (low disk space) daily; ~2024 MacBook Air for Xcode.
+- Founder: Windows PC (58 GB free, normal setup) daily; MacBook Air for Xcode.
 - Branch for current work: `claude/modest-gates-unuglw`.
-- Commit small and often with clear, plain-English messages.
-- Keep this file under 100 lines. Update it when decisions are made.
+- Commit small and often, plain-English messages. Keep this file < 100 lines.

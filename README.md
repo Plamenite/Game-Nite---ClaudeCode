@@ -14,8 +14,12 @@ apps/server/          The game server (Colyseus, TypeScript). Deals cards,
 packages/game-rules/  Rules shared by BOTH the app and the server, so they
                       can never disagree about what a legal move is.
 scripts/              Setup helpers. See setup-windows.ps1.
+docs/ACCOUNTS.md      The accounts and keys only the founder can create.
 CLAUDE.md             Project memory for the AI CTO. Read it first.
 ```
+
+Every push is checked automatically on GitHub (type check + tests); look for
+the green tick next to the latest commit.
 
 ## First-time setup on Windows
 
@@ -38,6 +42,7 @@ It installs Git, Node.js and VS Code, downloads this code into
 | `npm run server` | Starts the game server on your PC at http://localhost:2567 |
 | `npm test` | Runs the automated tests. |
 | `npm run typecheck` | Checks the code for type errors without running it. |
+| `npm run smoke -w @gamenite/server` | With the server running: joins it like a phone would and prints the party code. |
 
 Phone and PC must be on the same Wi-Fi for `npm run mobile`. If the phone
 cannot connect, Windows Firewall is usually blocking Node.js; allow it, or
