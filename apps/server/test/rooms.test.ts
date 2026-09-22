@@ -7,10 +7,11 @@ import {
   cardId,
   legalPlays,
   movesForCard,
-  partyJoinOptions,
+  LOUNGE_LEAVE_CODES,
+  loungeJoinOptions,
   toCourtPieceSnapshot,
   toFiveRowSnapshot,
-  toPartySnapshot,
+  toLoungeSnapshot,
   type Card,
   type FiveRowMove,
 } from "@gamenite/game-rules";
@@ -20,7 +21,7 @@ import { configureAuth } from "../src/auth.js";
 import { MemoryLedger, getLedger, setLedger } from "../src/ledger.js";
 import { CourtPieceState } from "../src/rooms/schema/CourtPieceState.js";
 import { FiveRowState } from "../src/rooms/schema/FiveRowState.js";
-import { PartyState } from "../src/rooms/schema/PartyState.js";
+import { LoungeState } from "../src/rooms/schema/LoungeState.js";
 
 /**
  * All room tests share ONE booted test server. Booting a second server in
@@ -75,6 +76,52 @@ async function fetchHand(client: { onMessage: any; send: any }): Promise<Card[]>
   client.send("sync", {});
   return (await hand).cards;
 }
+
+// ---------------------------------------------------------------- lounge helpers
+
+/** Open a lounge as its owner: the code is the owner's player code. */
+async function openLounge(ownerToken: string, ownerName: string) {
+  await getLedger().ensureProfile(ownerToken, ownerName, true);
+  const code = await getLedger().playerCode(ownerToken);
+  const lounge = await colyseus.createRoom<LoungeState>("lounge", { code });
+  colyseus.sdk.auth.token = ownerToken;
+  const owner = await colyseus.connectTo(lounge, loungeJoinOptions(ownerName, code));
+  colyseus.sdk.auth.token = "guest-TEST";
+  await lounge.waitForNextPatch();
+  return { lounge, code, owner };
+}
+
+/** Knock on a lounge the way a phone does: by room name + code. */
+async function knock(code: string, token: string, name: string) {
+  colyseus.sdk.auth.token = token;
+  try {
+    return await colyseus.sdk.join<LoungeState>("lounge", loungeJoinOptions(name, code));
+  } finally {
+    colyseus.sdk.auth.token = "guest-TEST";
+  }
+}
+
+/** Knock, and have someone inside open the door. */
+async function admit(lounge: any, host: any, code: string, token: string, name: string) {
+  const guest = await knock(code, token, name);
+  await lounge.waitForNextPatch();
+  host.send("accept", { sessionId: guest.sessionId });
+  await lounge.waitForMessage("accept");
+  await lounge.waitForNextPatch();
+  assert.ok(lounge.state.members.has(guest.sessionId), `${name} was let in`);
+  return guest;
+}
+
+/** A lounge of the owner plus these friends, all seated. */
+async function gather(ownerName: string, friends: string[]) {
+  const { lounge, code, owner } = await openLounge(`guest-${ownerName.toLowerCase()}`, ownerName);
+  const others = [];
+  for (const name of friends) others.push(await admit(lounge, owner, code, `guest-${name.toLowerCase()}`, name));
+  return { lounge, code, leader: owner, others };
+}
+
+/** Resolves with the close code when the server shuts the door on this client. */
+const closedWith = (client: any) => new Promise<number>((resolve) => client.onLeave((code: number) => resolve(code)));
 
 describe("FiveRowRoom (a live game)", () => {
   it("quick play seats two guests, deals seven private cards each, and starts the first turn", async () => {
@@ -185,73 +232,164 @@ describe("FiveRowRoom (a live game)", () => {
   });
 });
 
-describe("PartyRoom (walking skeleton)", () => {
-  it("creator is leader, friends join by code, wrong code is rejected", async () => {
-    const party = await colyseus.createRoom<PartyState>("party", {});
-    const leader = await colyseus.connectTo(party, { name: "Zain" });
-    const code = party.state.code;
-    assert.strictEqual(code.length, 6);
-    assert.strictEqual(party.state.leaderSessionId, leader.sessionId);
+describe("LoungeRoom (where friends gather)", () => {
+  it("the owner opens a lounge with their player code and leads; a friend knocks and a member lets them in", async () => {
+    const { lounge, code, owner } = await openLounge("guest-zain", "Zain");
+    assert.match(code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+    assert.strictEqual(lounge.state.code, code);
+    assert.strictEqual(lounge.state.leaderSessionId, owner.sessionId);
 
-    // A second, unrelated party is open at the same time (a real lobby has many).
-    const otherParty = await colyseus.createRoom<PartyState>("party", {});
-    await colyseus.connectTo(otherParty, { name: "Someone" });
+    // Another lounge is open at the same time (a real evening has many).
+    const other = await openLounge("guest-someone", "Someone");
 
-    // Join the way the phone does: by room name + code, not by room id.
-    const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Friend", code));
-    await party.waitForNextPatch();
-    assert.strictEqual(friend.roomId, party.roomId, "landed in the party with that code");
-    assert.strictEqual(party.state.members.size, 2);
-    assert.strictEqual(otherParty.state.members.size, 1, "the other party is untouched");
-    assert.strictEqual(party.state.members.get(friend.sessionId).name, "Friend");
-    assert.strictEqual(party.state.members.get(friend.sessionId).ready, false);
+    const friend = await knock(code, "guest-friend", "Friend");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(friend.roomId, lounge.roomId, "knocked on the lounge with that code");
+    assert.strictEqual(lounge.state.members.size, 1, "still at the door");
+    assert.strictEqual(lounge.state.requests.get(friend.sessionId).name, "Friend");
+    let view = toLoungeSnapshot(friend.state);
+    assert.deepStrictEqual(view.requests, [{ sessionId: friend.sessionId, name: "Friend" }]);
 
-    await assert.rejects(
-      colyseus.sdk.join("party", partyJoinOptions("Stranger", "ZZZZZZ")),
-      /no rooms found|not found/i,
-      "an unknown code must not match any party",
-    );
+    owner.send("accept", { sessionId: friend.sessionId });
+    await lounge.waitForMessage("accept");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.members.size, 2);
+    assert.strictEqual(lounge.state.requests.size, 0);
+    assert.strictEqual(other.lounge.state.members.size, 1, "the other lounge is untouched");
 
-    const view = toPartySnapshot(friend.state);
-    assert.deepStrictEqual(view.members.map((m) => [m.name, m.isLeader]), [["Zain", true], ["Friend", false]]);
-    assert.strictEqual(view.canLaunch, false, "nobody is ready yet");
+    view = toLoungeSnapshot(friend.state);
+    assert.deepStrictEqual(view.members.map((m) => [m.name, m.isLeader, m.ready]), [["Zain", true, false], ["Friend", false, false]]);
+    assert.strictEqual(view.canStart, false, "nobody is ready yet");
+
+    await assert.rejects(knock("ZZZZZZZZ", "guest-stranger", "Stranger"), /no rooms found|not found/i, "an unknown code finds no lounge");
+    await assert.rejects(colyseus.sdk.joinById(lounge.roomId, loungeJoinOptions("Sneaky", "ZZZZZZZZ")), /wrong lounge code/i);
   });
 
-  it("only the leader can launch, and only when everyone is ready", async () => {
-    const party = await colyseus.createRoom<PartyState>("party", {});
-    const leader = await colyseus.connectTo(party, { name: "Zain" });
-    const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Friend", party.state.code));
-    await party.waitForNextPatch();
+  it("only the owner can open an empty lounge, and the owner always walks straight in", async () => {
+    await getLedger().ensureProfile("guest-zain", "Zain", true);
+    const code = await getLedger().playerCode("guest-zain");
+    const squat = await colyseus.createRoom<LoungeState>("lounge", { code });
+    colyseus.sdk.auth.token = "guest-squatter";
+    await assert.rejects(colyseus.connectTo(squat, loungeJoinOptions("Squatter", code)), /only the owner/i);
+    colyseus.sdk.auth.token = "guest-TEST";
+    await squat.disconnect();
 
-    const refused1 = nextMessage<{ reason: string }>(friend, "refused");
-    friend.send("launch", {});
-    assert.match((await refused1).reason, /leader/i);
+    const { lounge, owner } = await openLounge("guest-zain", "Zain");
+    const ali = await admit(lounge, owner, code, "guest-ali", "Ali");
+    await owner.leave(true);
+    await waitFor(() => lounge.state.members.size === 1, 3000, "owner gone");
+    assert.strictEqual(lounge.state.leaderSessionId, ali.sessionId, "the next member leads");
 
-    const refused2 = nextMessage<{ reason: string }>(leader, "refused");
-    leader.send("launch", {});
-    assert.match((await refused2).reason, /ready/i);
-    assert.strictEqual(party.state.status, "open");
+    // Zain comes back to his own lounge: no knocking.
+    colyseus.sdk.auth.token = "guest-zain";
+    const back = await colyseus.sdk.joinOrCreate<LoungeState>("lounge", loungeJoinOptions("Zain", code));
+    colyseus.sdk.auth.token = "guest-TEST";
+    await lounge.waitForNextPatch();
+    assert.strictEqual(back.roomId, lounge.roomId);
+    assert.ok(lounge.state.members.has(back.sessionId), "seated at once");
+    assert.strictEqual(lounge.state.leaderSessionId, ali.sessionId, "Ali keeps the lead");
   });
 
-  it("launch opens a Five Row table sized to the party and seats every member", async () => {
-    const party = await colyseus.createRoom<PartyState>("party", {});
-    const leader = await colyseus.connectTo(party, { name: "Zain" });
-    const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Friend", party.state.code));
-    await party.waitForNextPatch();
+  it("the door: a member can turn someone away, an unanswered knock times out, and a full lounge refuses", async () => {
+    process.env.LOUNGE_KNOCK_SECONDS = "0.3";
+    try {
+      const { lounge, code, owner } = await openLounge("guest-zain", "Zain");
+      const turned = await knock(code, "guest-turned", "Turned");
+      await lounge.waitForNextPatch();
+      const turnedClosed = closedWith(turned);
+      owner.send("decline", { sessionId: turned.sessionId });
+      assert.strictEqual(await turnedClosed, LOUNGE_LEAVE_CODES.declined);
+      await lounge.waitForNextPatch();
+      assert.strictEqual(lounge.state.requests.size, 0);
+
+      const ignored = await knock(code, "guest-ignored", "Ignored");
+      assert.strictEqual(await closedWith(ignored), LOUNGE_LEAVE_CODES.timedOut);
+
+      for (const name of ["Ali", "Sara", "Bilal"]) await admit(lounge, owner, code, `guest-${name.toLowerCase()}`, name);
+      assert.strictEqual(lounge.state.members.size, 4);
+      await assert.rejects(knock(code, "guest-fifth", "Fifth"), /full/i);
+    } finally {
+      delete process.env.LOUNGE_KNOCK_SECONDS;
+    }
+  });
+
+  it("the leader can remove a member and hand over the lead", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali", "Sara"]);
+    const [ali, sara] = others;
+
+    const refused = nextMessage<{ reason: string }>(ali, "refused");
+    ali.send("kick", { sessionId: sara.sessionId });
+    assert.match((await refused).reason, /leader/i);
+
+    leader.send("make_leader", { sessionId: ali.sessionId });
+    await lounge.waitForMessage("make_leader");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.leaderSessionId, ali.sessionId);
+
+    const saraClosed = closedWith(sara);
+    ali.send("kick", { sessionId: sara.sessionId });
+    assert.strictEqual(await saraClosed, LOUNGE_LEAVE_CODES.kicked);
+    await waitFor(() => lounge.state.members.size === 2, 3000, "Sara gone");
+    await lounge.waitForNextPatch();
+    assert.deepStrictEqual(toLoungeSnapshot(leader.state).members.map((m) => m.name), ["Zain", "Ali"]);
+  });
+
+  it("only the leader picks the game and starts; the picker refuses tables too small for the lounge", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali", "Sara"]);
+    const [ali] = others;
+
+    let refused = nextMessage<{ reason: string }>(ali, "refused");
+    ali.send("start", {});
+    assert.match((await refused).reason, /leader/i);
+
+    refused = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("set_game", { game: "fiverow", players: 2 });
+    assert.match((await refused).reason, /seat for everyone/i);
+
+    refused = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("set_game", { game: "courtpiece", players: 3 });
+    assert.match((await refused).reason, /that size/i);
+
+    leader.send("set_game", { game: "courtpiece" });
+    await lounge.waitForMessage("set_game");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.players, 4, "Court Piece is always four seats");
+    assert.strictEqual(toLoungeSnapshot(leader.state).seatsToFill, 1);
+
+    for (const c of [leader, ...others]) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 3; i++) await lounge.waitForMessage("set_ready");
+    refused = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("start", {});
+    assert.match((await refused).reason, /1 more player/i);
+
+    leader.send("set_game", { game: "fiverow", players: 3 });
+    await lounge.waitForMessage("set_game");
+    await lounge.waitForNextPatch();
+    assert.ok([...lounge.state.members.values()].every((m) => !m.ready), "a new pick clears Ready");
+    refused = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("start", {});
+    assert.match((await refused).reason, /ready/i);
+    assert.strictEqual(lounge.state.status, "open");
+  });
+
+  it("start opens a Five Row table sized to the lounge, seats every member, and the lounge stays open with Ready cleared", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Friend"]);
+    const [friend] = others;
 
     leader.send("set_ready", { ready: true });
+    await lounge.waitForMessage("set_ready");
     friend.send("set_ready", { ready: true });
-    await party.waitForMessage("set_ready");
-    await party.waitForMessage("set_ready");
-    await party.waitForNextPatch();
-    assert.strictEqual(toPartySnapshot(leader.state).canLaunch, true);
+    await lounge.waitForMessage("set_ready");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(toLoungeSnapshot(leader.state).canStart, true);
 
     const leaderSeat = nextMessage<any>(leader, "table_ready");
     const friendSeat = nextMessage<any>(friend, "table_ready");
-    leader.send("launch", {});
+    leader.send("start", {});
     const [seatA, seatB] = await Promise.all([leaderSeat, friendSeat]);
     assert.strictEqual(seatA.roomId, seatB.roomId, "same table for both");
-    assert.strictEqual(party.state.status, "launched");
+    await waitFor(() => lounge.state.status === "open" && ![...lounge.state.members.values()].some((m) => m.ready), 3000, "lounge open again");
+    assert.strictEqual(lounge.state.members.size, 2, "everyone is still in the lounge, under the game");
 
     const tableA = await colyseus.sdk.consumeSeatReservation<FiveRowState>(seatA);
     const tableB = await colyseus.sdk.consumeSeatReservation<FiveRowState>(seatB);
@@ -259,12 +397,21 @@ describe("PartyRoom (walking skeleton)", () => {
     await waitFor(() => table.state.phase === "playing", 3000, "match start");
     await table.waitForNextPatch();
 
-    assert.strictEqual(table.maxClients, 2, "table sized to the party");
+    assert.strictEqual(table.maxClients, 2, "table sized to the lounge");
     const view = toFiveRowSnapshot(tableA.state);
     assert.deepStrictEqual(view.seats.map((s) => s.name).sort(), ["Friend", "Zain"]);
     assert.ok(view.turnSessionId, "the first turn has started");
     assert.deepStrictEqual(toFiveRowSnapshot(tableB.state).seats, view.seats);
     assert.strictEqual((await fetchHand(tableA)).length, 7);
+  });
+
+  it("/me tells a phone its player code, which is also its lounge code", async () => {
+    colyseus.sdk.auth.token = "guest-me";
+    const me = (await colyseus.sdk.http.get("/me")).data as { playerCode: string; guest: boolean };
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.match(me.playerCode, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+    assert.strictEqual(me.guest, true);
+    assert.strictEqual(me.playerCode, await getLedger().playerCode("guest-me"));
   });
 });
 
@@ -390,48 +537,42 @@ describe("CourtPieceRoom (a live game)", () => {
     }
   });
 
-  it("the leader assigns teams; launch needs two a side; seats follow the teams with partners opposite", async () => {
-    const party = await colyseus.createRoom<PartyState>("party", {});
-    const leader = await colyseus.connectTo(party, { name: "Zain" });
-    const others = [];
-    for (const name of ["Ali", "Sara", "Bilal"]) {
-      others.push(await colyseus.sdk.join<PartyState>("party", partyJoinOptions(name, party.state.code)));
-    }
-    await party.waitForNextPatch();
+  it("the leader assigns sides; start needs two a side; seats follow the sides with partners opposite", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali", "Sara", "Bilal"]);
     const all = [leader, ...others];
-    assert.deepStrictEqual(all.map((c) => party.state.members.get(c.sessionId).team), [0, 1, 0, 1], "alternate on join");
+    assert.deepStrictEqual(all.map((c) => lounge.state.members.get(c.sessionId).team), [0, 1, 0, 1], "alternate on join");
 
     // Only the leader may move people.
     const refused = nextMessage<{ reason: string }>(others[0], "refused");
     others[0].send("set_team", { sessionId: leader.sessionId, team: 1 });
     assert.match((await refused).reason, /leader/i);
 
-    // Leader wants Zain + Bilal against Ali + Sara: move Sara to team 1 and Bilal to team 0.
+    // Leader wants Zain + Bilal against Ali + Sara: move Sara to side 1 and Bilal to side 0.
     leader.send("set_team", { sessionId: others[1].sessionId, team: 1 });
-    await party.waitForMessage("set_team");
+    await lounge.waitForMessage("set_team");
     leader.send("set_team", { sessionId: others[2].sessionId, team: 0 });
-    await party.waitForMessage("set_team");
+    await lounge.waitForMessage("set_team");
     leader.send("set_game", { game: "courtpiece" });
-    await party.waitForMessage("set_game");
+    await lounge.waitForMessage("set_game");
     for (const c of all) c.send("set_ready", { ready: true });
-    for (let i = 0; i < 4; i++) await party.waitForMessage("set_ready");
-    await party.waitForNextPatch();
+    for (let i = 0; i < 4; i++) await lounge.waitForMessage("set_ready");
+    await lounge.waitForNextPatch();
 
     // Lopsided (three on one side) is refused.
     leader.send("set_team", { sessionId: others[0].sessionId, team: 0 });
-    await party.waitForMessage("set_team");
+    await lounge.waitForMessage("set_team");
     const lopsided = nextMessage<{ reason: string }>(leader, "refused");
-    leader.send("launch", {});
+    leader.send("start", {});
     assert.match((await lopsided).reason, /two against two/i);
     leader.send("set_team", { sessionId: others[0].sessionId, team: 1 });
-    await party.waitForMessage("set_team");
-    await party.waitForNextPatch();
-    assert.strictEqual(toPartySnapshot(leader.state).canLaunch, true);
+    await lounge.waitForMessage("set_team");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(toLoungeSnapshot(leader.state).canStart, true);
 
     const seats = all.map((c) => nextMessage<any>(c, "table_ready"));
-    leader.send("launch", {});
+    leader.send("start", {});
     const reservations = await Promise.all(seats);
-    // Consume in scrambled order: seats must still follow the teams, not arrival.
+    // Consume in scrambled order: seats must still follow the sides, not arrival.
     const scrambled = [3, 1, 0, 2];
     const tables: any[] = new Array(4);
     for (const i of scrambled) tables[i] = await colyseus.sdk.consumeSeatReservation<CourtPieceState>(reservations[i]);
@@ -441,18 +582,12 @@ describe("CourtPieceRoom (a live game)", () => {
 
     const snap = toCourtPieceSnapshot(tables[0].state);
     const bySeat = snap.seats.map((s) => s.name);
-    assert.deepStrictEqual(bySeat, ["Zain", "Ali", "Bilal", "Sara"], "team 0 at seats 0 and 2, team 1 at 1 and 3");
+    assert.deepStrictEqual(bySeat, ["Zain", "Ali", "Bilal", "Sara"], "side 0 at seats 0 and 2, side 1 at 1 and 3");
     assert.deepStrictEqual(snap.seats.map((s) => s.team), [0, 1, 0, 1]);
   });
 
-  it("a party of four can launch Court Piece as a best-of-three series", async () => {
-    const party = await colyseus.createRoom<PartyState>("party", {});
-    const leader = await colyseus.connectTo(party, { name: "Zain" });
-    const others = [];
-    for (const name of ["Ali", "Sara", "Bilal"]) {
-      others.push(await colyseus.sdk.join<PartyState>("party", partyJoinOptions(name, party.state.code)));
-    }
-    await party.waitForNextPatch();
+  it("a lounge of four can start Court Piece as a best-of-three series", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali", "Sara", "Bilal"]);
 
     // Only the leader may pick the game.
     const refused = nextMessage<{ reason: string }>(others[0], "refused");
@@ -460,17 +595,17 @@ describe("CourtPieceRoom (a live game)", () => {
     assert.match((await refused).reason, /leader/i);
 
     leader.send("set_game", { game: "courtpiece", variant: "double_siri", bestOf: 3 });
-    await party.waitForMessage("set_game");
-    await party.waitForNextPatch();
-    assert.strictEqual(party.state.game, "courtpiece");
-    assert.strictEqual(toPartySnapshot(leader.state).bestOf, 3);
+    await lounge.waitForMessage("set_game");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.game, "courtpiece");
+    assert.strictEqual(toLoungeSnapshot(leader.state).bestOf, 3);
 
     for (const c of [leader, ...others]) c.send("set_ready", { ready: true });
-    for (let i = 0; i < 4; i++) await party.waitForMessage("set_ready");
-    await party.waitForNextPatch();
+    for (let i = 0; i < 4; i++) await lounge.waitForMessage("set_ready");
+    await lounge.waitForNextPatch();
 
     const seats = [leader, ...others].map((c) => nextMessage<any>(c, "table_ready"));
-    leader.send("launch", {});
+    leader.send("start", {});
     const reservations = await Promise.all(seats);
     const tables = [];
     for (const r of reservations) tables.push(await colyseus.sdk.consumeSeatReservation<CourtPieceState>(r));
@@ -479,11 +614,12 @@ describe("CourtPieceRoom (a live game)", () => {
     await table.waitForNextPatch();
 
     assert.strictEqual(table.state.variant, "double_siri");
-    assert.strictEqual(table.state.bestOf, 3, "a party launch may set the series length");
+    assert.strictEqual(table.state.bestOf, 3, "a lounge start may set the series length");
     const snap = toCourtPieceSnapshot(tables[0].state);
-    assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Ali", "Sara", "Bilal"], "default alternating teams: partners opposite");
+    assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Ali", "Sara", "Bilal"], "default alternating sides: partners opposite");
     assert.strictEqual((await fetchHand(tables[3])).length, 13);
   });
+
 });
 
 describe("coins at the table", () => {
@@ -551,31 +687,27 @@ describe("coins at the table", () => {
     assert.strictEqual(await coins("guest-tier-500"), 500);
   });
 
-  it("in a party, Ready is refused when a member cannot afford the leader's tier", async () => {
-    const party = await colyseus.createRoom<PartyState>("party", {});
-    const leader = await connectAs(party, "guest-lead", "Zain");
-    colyseus.sdk.auth.token = "guest-broke";
-    const friend = await colyseus.sdk.join<PartyState>("party", partyJoinOptions("Ali", party.state.code));
-    colyseus.sdk.auth.token = "guest-TEST";
-    await party.waitForNextPatch();
-    // Make Ali broke: two 500 tables elsewhere.
+  it("in a lounge, Ready is refused when a member cannot afford the leader's tier", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Broke"]);
+    const [friend] = others;
+    // Make the friend broke: two 500 tables elsewhere.
     await getLedger().chargeTableEntry("guest-broke", "elsewhere-1", 500);
     await getLedger().chargeTableEntry("guest-broke", "elsewhere-2", 500);
 
     leader.send("set_game", { game: "fiverow", entry: 500 });
-    await party.waitForMessage("set_game");
-    await party.waitForNextPatch();
-    assert.strictEqual(toPartySnapshot(leader.state).entry, 500);
+    await lounge.waitForMessage("set_game");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(toLoungeSnapshot(leader.state).entry, 500);
 
     const refused = nextMessage<{ reason: string }>(friend, "refused");
     friend.send("set_ready", { ready: true });
     assert.match((await refused).reason, /need 500 coins/i);
-    assert.strictEqual(party.state.members.get(friend.sessionId).ready, false);
+    assert.strictEqual(lounge.state.members.get(friend.sessionId).ready, false);
 
     leader.send("set_ready", { ready: true });
-    await party.waitForMessage("set_ready");
-    await party.waitForNextPatch();
-    assert.strictEqual(party.state.members.get(leader.sessionId).ready, true, "the leader can afford it");
+    await lounge.waitForMessage("set_ready");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.members.get(leader.sessionId).ready, true, "the leader can afford it");
   });
 
   it("the wallet endpoints read the balance and pay the daily bonus once", async () => {

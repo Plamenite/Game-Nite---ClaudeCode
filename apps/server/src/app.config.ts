@@ -11,8 +11,8 @@ import {
 /**
  * Import your Room files
  */
-import { GAMES, PARTY_JOIN_FILTER_KEY, ROOMS } from "@gamenite/game-rules";
-import { PartyRoom } from "./rooms/PartyRoom.js";
+import { GAMES, LOUNGE_JOIN_FILTER_KEY, ROOMS } from "@gamenite/game-rules";
+import { LoungeRoom } from "./rooms/LoungeRoom.js";
 import { FiveRowRoom } from "./rooms/FiveRowRoom.js";
 import { CourtPieceRoom } from "./rooms/CourtPieceRoom.js";
 import { walletEndpoints } from "./wallet.js";
@@ -27,10 +27,11 @@ const server = defineServer({
     [ROOMS.fiverow]: defineRoom(FiveRowRoom).filterBy(["players", "entry"]).enableRealtimeListing(),
     // Quick play: joinOrCreate with { variant } picks Single or Double Siri.
     [ROOMS.courtpiece]: defineRoom(CourtPieceRoom).filterBy(["variant", "entry"]).enableRealtimeListing(),
-    // Friends join with partyJoinOptions(name, code). The matchmaker forwards
-    // the "code" option and its driver matches it against the room's
-    // metadata.code, which PartyRoom sets in onCreate.
-    [ROOMS.party]: defineRoom(PartyRoom).filterBy([PARTY_JOIN_FILTER_KEY]),
+    // Players open their own lounge, or knock on a friend's, with
+    // loungeJoinOptions(name, code). The matchmaker forwards the "code"
+    // option and its driver matches it against the room's metadata.code,
+    // which LoungeRoom sets in onCreate.
+    [ROOMS.lounge]: defineRoom(LoungeRoom).filterBy([LOUNGE_JOIN_FILTER_KEY]),
     lobby: defineRoom(LobbyRoom),
   },
 

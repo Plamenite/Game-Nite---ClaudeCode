@@ -33,7 +33,7 @@ import { FiveRowRun, FiveRowSeat, FiveRowState } from "./schema/FiveRowState.js"
 const RANDOM_RANGE = 2 ** 48 - 1;
 const secureRandom = () => randomInt(0, RANDOM_RANGE) / RANDOM_RANGE;
 
-/** Set by a party launch (trusted) or by quick play. */
+/** Set by a lounge start (trusted) or by quick play. */
 export interface FiveRowRoomOptions {
   players?: number;
   /** Coins each seat pays: 0, 500, 2000 or 10000. */
@@ -41,7 +41,7 @@ export interface FiveRowRoomOptions {
   launchSecret?: string;
 }
 
-/** What the phone sends when joining; `seat` only counts on a party launch. */
+/** What the phone sends when joining; `seat` only counts on a lounge start. */
 export interface FiveRowJoinOptions {
   name?: string;
   seat?: number;
@@ -59,7 +59,7 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
   private match: FiveRowMatch | null = null;
   /** sessionId per seat; teammates alternate (seat % teams). */
   private order: (string | undefined)[] = [];
-  /** A party launch may place players in chosen seats. */
+  /** A lounge start may place players in chosen seats. */
   private trusted = false;
   /** Coins each seat paid. */
   private entry = 0;

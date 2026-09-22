@@ -18,3 +18,12 @@ export interface WalletSnapshot {
   /** Day number of today's login streak; grows every consecutive day, restarts when one is missed. */
   streakDay: number;
 }
+
+/** GET: who the server thinks I am, including the code that opens my lounge. */
+export const ME_ROUTE = '/me';
+
+export interface MeSnapshot {
+  /** 8 letters and digits: friends add you with it, and it opens your lounge. */
+  playerCode: string;
+  guest: boolean;
+}

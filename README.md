@@ -1,7 +1,7 @@
 # Gamenite
 
 An iOS-first mobile platform for multiplayer board and card games, starting
-with a five-in-a-row card-and-chip game (internal name Five Row) and **Court Piece (Rang)**. Friends gather in a party lobby
+with a five-in-a-row card-and-chip game (internal name Five Row) and **Court Piece (Rang)**. Friends gather in a lounge
 with voice chat, ready up, and play. Coins and gems are in-app only and are
 never exchangeable for money.
 
@@ -44,30 +44,32 @@ It installs Git, Node.js and VS Code, downloads this code into
 | `npm run server` | Starts the game server on your PC at http://localhost:2567 |
 | `npm test` | Runs the automated tests. |
 | `npm run typecheck` | Checks the code for type errors without running it. |
-| `npm run smoke -w @gamenite/server` | With the server running: joins it like a phone would and prints the party code. |
+| `npm run smoke -w @gamenite/server` | With the server running: opens a lounge like a phone would and prints its code. |
 
 Phone and PC must be on the same Wi-Fi for `npm run mobile`. If the phone
 cannot connect, Windows Firewall is usually blocking Node.js; allow it, or
 use the tunnel command.
 
-## Try it: party → a real game (phone talks to server)
+## Try it: lounge → a real game (phone talks to server)
 
 1. In one terminal: `npm run server`. Click Allow if Windows Firewall asks.
 2. In another terminal: `npm run mobile`, then open the app on your iPhone.
-3. Open the **Play** tab and tap **Create a party**. A 6-character code
-   appears.
-4. For a second player, press `w` in the mobile terminal to open the app in
-   a browser tab, go to Play, type the code, and tap **Join party**.
-5. Both tap **Ready**. The leader (★) taps **Launch**. Everyone lands at the
-   same Five Row table with seven private cards. With four friends the
-   leader can pick **Court Piece** instead, choose Single or Double Siri and
-   best of 1, 3 or 5, and tap the A/B badges to set the teams.
-6. On your turn, pick a card, then tap a highlighted space. A two-eyed Jack
+   You land in **your lounge**; your 8-character code is at the top.
+3. For a second player, press `w` in the mobile terminal to open the app in
+   a browser tab, type your code under **Join a friend** and tap **Knock**.
+4. On the phone, tap **Let in**. Both tap **Ready**. The leader (★) picks the
+   game and table size and taps **Start**. Everyone lands at the same Five
+   Row table with seven private cards, and is back in the lounge after.
+   With four friends the leader can pick **Court Piece** instead, choose
+   Single or Double Siri and best of 1, 3 or 5, and tap the A/B badges to
+   set the sides. The leader can also **Remove** someone or **Make leader**.
+5. On your turn, pick a card, then tap a highlighted space. A two-eyed Jack
    goes anywhere open; a one-eyed Jack removes an opponent's chip. A dead
    card (both spaces taken) can be swapped once per turn. Thirty seconds per
    turn; if you run out, the server plays a random legal card for you.
 
-**Quick play** skips the party: Five Row 1 vs 1, or Court Piece Single Siri with three strangers.
+On your own? The lounge offers **Play now with other players**: Five Row
+1 vs 1, or Court Piece Single Siri with three strangers.
 
 Low on disk space? Use slim setup: it skips VS Code and clears the npm cache.
 

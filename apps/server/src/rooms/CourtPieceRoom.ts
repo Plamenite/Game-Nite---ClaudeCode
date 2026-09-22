@@ -40,7 +40,7 @@ const secureRandom = () => randomInt(0, RANDOM_RANGE) / RANDOM_RANGE;
 
 const PLAYERS = 4;
 
-/** Set by a party launch (trusted) or by quick play (variant only). */
+/** Set by a lounge start (trusted) or by quick play (variant only). */
 export interface CourtPieceRoomOptions {
   variant?: CourtPieceVariant;
   bestOf?: CourtPieceBestOf;
@@ -49,7 +49,7 @@ export interface CourtPieceRoomOptions {
   launchSecret?: string;
 }
 
-/** What the phone sends when joining; `seat` only counts on a party launch. */
+/** What the phone sends when joining; `seat` only counts on a lounge start. */
 export interface CourtPieceJoinOptions {
   name?: string;
   seat?: number;
@@ -90,7 +90,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
 
   async onCreate(options: CourtPieceRoomOptions | undefined) {
     const variant = COURT_PIECE_VARIANTS.some((v) => v.id === options?.variant) ? (options!.variant as CourtPieceVariant) : "single_siri";
-    // Only a party launch may set a series length; quick play is always one deal.
+    // Only a lounge start may set a series length; quick play is always one deal.
     const requested = Number(options?.bestOf);
     const bestOf = isTrustedLaunch(options) && (COURT_PIECE_PRIVATE_BEST_OF as readonly number[]).includes(requested)
       ? (requested as CourtPieceBestOf)

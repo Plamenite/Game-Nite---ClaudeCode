@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 /**
- * A secret only the server knows. A party launch passes it when it creates
+ * A secret only the server knows. A lounge start passes it when it creates
  * a game room, so the room can trust options a phone must never set on its
  * own (for example a best-of-5 series on a public table).
  *

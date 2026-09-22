@@ -9,6 +9,9 @@ describe("MemoryLedger (development ledger with the database's rules)", () => {
     const l = new MemoryLedger();
     assert.strictEqual(await l.ensureProfile("u1", "Zain", false), 1000);
     assert.strictEqual(await l.ensureProfile("u1", "Zain", false), 1000);
+    assert.match(await l.playerCode("u1"), /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+    assert.strictEqual(await l.playerCode("u1"), await l.playerCode("u1"), "a player keeps one code");
+    assert.notStrictEqual(await l.playerCode("u1"), await l.playerCode("u2"));
     assert.strictEqual(await l.claimDailyBonus("u1"), 1200);
     await rejects(l.claimDailyBonus("u1"), /already claimed/);
     for (let i = 1; i <= 5; i++) await l.rewardAd("u1", `ad-${i}`);

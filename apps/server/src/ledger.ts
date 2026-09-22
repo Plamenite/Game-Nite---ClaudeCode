@@ -4,6 +4,7 @@ import {
   MAX_AD_REWARDS_PER_DAY,
   STARTING_COINS,
   dailyBonusStatus,
+  generateLoungeCode,
   isTableEntry,
   utcDay,
   type DailyBonusStatus,
@@ -21,6 +22,8 @@ export interface Ledger {
   /** First sight of a player: profile plus starting coins, once. Returns the balance. */
   ensureProfile(userId: string, displayName: string, isGuest: boolean): Promise<number>;
   getBalance(userId: string): Promise<number>;
+  /** The 8-character code friends add you with; it also opens your lounge. */
+  playerCode(userId: string): Promise<string>;
   /** Where today's login streak stands: claimed yet, which day, how many coins. */
   dailyBonus(userId: string): Promise<DailyBonusStatus>;
   /** Pays today's streak amount once per UTC day. Returns the balance. */
@@ -40,6 +43,7 @@ export class MemoryLedger implements Ledger {
   private keys = new Set<string>();
   private adCounts = new Map<string, number>(); // `${user}:${day}` -> count
   private streaks = new Map<string, { lastClaimDay: string; streakDay: number }>();
+  private codes = new Map<string, string>();
 
   /** Tests pass a clock to walk through days. */
   constructor(private readonly clock: () => Date = () => new Date()) {}
@@ -64,6 +68,15 @@ export class MemoryLedger implements Ledger {
 
   async getBalance(userId: string): Promise<number> {
     return this.balances.get(userId) ?? 0;
+  }
+
+  async playerCode(userId: string): Promise<string> {
+    let code = this.codes.get(userId);
+    if (!code) {
+      do code = generateLoungeCode(); while ([...this.codes.values()].includes(code));
+      this.codes.set(userId, code);
+    }
+    return code;
   }
 
   async dailyBonus(userId: string): Promise<DailyBonusStatus> {
@@ -122,6 +135,11 @@ export class SupabaseLedger implements Ledger {
   }
   getBalance(userId: string) {
     return this.rpc<number>("get_balance", { p_user: userId }).then(Number);
+  }
+  async playerCode(userId: string) {
+    const { data, error } = await this.client.from("profiles").select("player_code").eq("id", userId).single();
+    if (error) throw new LedgerError(error.message);
+    return String(data.player_code);
   }
   dailyBonus(userId: string) {
     return this.rpc<{ claimed_today: boolean; streak_day: number; coins: number }>("daily_bonus_status", { p_user: userId }).then((s) => ({

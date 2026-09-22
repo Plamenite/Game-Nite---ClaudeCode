@@ -85,7 +85,7 @@ export function useFiveRow() {
     [attach],
   );
 
-  /** Party launch: take the seat the party room reserved for us. */
+  /** Lounge start: take the seat the lounge reserved for us. */
   const joinWithReservation = useCallback(
     async (reservation: SeatReservation) => {
       if (roomRef.current) return;

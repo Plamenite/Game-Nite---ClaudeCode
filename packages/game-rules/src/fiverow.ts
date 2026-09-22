@@ -89,7 +89,7 @@ export const FIVEROW_TABLE_CONFIGS: readonly FiveRowTableConfig[] = [
 
 export const FIVEROW_MAX_PLAYERS = 4;
 
-/** The table shape for a party of this size, or null if none fits. */
+/** The table shape for a lounge of this size, or null if none fits. */
 export function fiverowConfigForPlayers(playerCount: number): FiveRowTableConfig | null {
   return FIVEROW_TABLE_CONFIGS.find((c) => c.players === playerCount) ?? null;
 }

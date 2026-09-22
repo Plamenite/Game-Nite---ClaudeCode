@@ -6,8 +6,8 @@ import { getServerUrl } from '@/lib/server-url';
 let client: Client | null = null;
 
 /**
- * One connection helper for the whole app. Party and table share it so a
- * seat reservation handed out by the party can be consumed by the table.
+ * One connection helper for the whole app. Lounge and table share it so a
+ * seat reservation handed out by the lounge can be consumed by the table.
  */
 export function getClient(): Client {
   if (!client) {

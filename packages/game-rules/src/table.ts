@@ -3,7 +3,7 @@
  * these so a typo on one side becomes a compile error, not a silent bug.
  */
 export const ROOMS = {
-  party: 'party',
+  lounge: 'lounge',
   fiverow: 'fiverow',
   courtpiece: 'courtpiece',
 } as const;

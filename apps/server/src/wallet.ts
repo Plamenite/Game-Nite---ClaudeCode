@@ -1,5 +1,5 @@
 import { createEndpoint } from "colyseus";
-import { WALLET_ROUTES, type WalletSnapshot } from "@gamenite/game-rules";
+import { ME_ROUTE, WALLET_ROUTES, type MeSnapshot, type WalletSnapshot } from "@gamenite/game-rules";
 import { authenticate, type PlayerAuth } from "./auth.js";
 import { LedgerError, getLedger } from "./ledger.js";
 
@@ -26,6 +26,14 @@ async function snapshot(player: PlayerAuth): Promise<WalletSnapshot> {
  * Only the server ever moves coins; the phone just asks.
  */
 export const walletEndpoints = {
+  /** GET /me: my player code (which opens my lounge) and whether I am a guest. */
+  me: createEndpoint(ME_ROUTE, { method: "GET" }, async (ctx): Promise<MeSnapshot> => {
+    const player = await playerFromHeader(ctx.getHeader("authorization"));
+    if (!player) throw ctx.error("UNAUTHORIZED", { message: "sign in first" });
+    await getLedger().ensureProfile(player.userId, "", player.guest);
+    return { playerCode: await getLedger().playerCode(player.userId), guest: player.guest };
+  }),
+
   /** GET /wallet: balance and whether today's bonus is still available. */
   wallet: createEndpoint(WALLET_ROUTES.wallet, { method: "GET" }, async (ctx) => {
     const player = await playerFromHeader(ctx.getHeader("authorization"));

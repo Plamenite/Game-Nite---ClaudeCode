@@ -89,7 +89,7 @@ with the same audience. What Ludo Star does, and where Gamenite stands:
 | Winner takes the entries of the losers | Same, minus a 10% table fee | Keep |
 | Daily login bonus that grows with a streak | Live: 200, 250 ... 500 by day 7, restarts after a missed day | Keep; revisit the numbers with real play data |
 | Free coins for watching short videos | 100 per ad, five a day | Same, live once the ad account exists |
-| Daily spin for coins and gems | Not yet | Free daily spin with fixed, published odds; no real-money spins |
+| Daily spin for coins and gems | Not yet | Free daily spin with fixed, published amounts; no real-money spins |
 | Gems: a second, rarer currency for chests, cosmetics, skipping ads | Not yet | Gems for cosmetics and voice minutes; never for table entries |
 | Send and receive gifts with friends (Lucky Dice) | Not yet | Small daily friend gifts once the friends list exists; capped, non-transferable balances |
 | Invite a friend bonus | Not yet | One-time bonus when an invited friend plays a first table |
@@ -112,9 +112,9 @@ bonuses the server grants, not a way to move coins.
 
 ## When coins actually move at a table
 
-- The party leader picks the tier along with the game. Quick play shows the
+- The lounge leader picks the tier along with the game. Quick play shows the
   tiers as buttons.
-- Tapping **Ready** in a party, or joining quick play, checks the player can
+- Tapping **Ready** in a lounge, or joining quick play, checks the player can
   afford the tier. If not, the game says how many coins are missing.
 - The entry is charged the moment a seat is taken. If a table never fills
   and a player leaves, the entry is refunded, and that player cannot
