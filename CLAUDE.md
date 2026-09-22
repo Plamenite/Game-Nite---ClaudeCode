@@ -5,8 +5,7 @@
   Git, dev environments, and backends. Coach them; never assume knowledge.
 - ALWAYS ask 1–2 clarifying questions before building or changing
   architecture or game logic. Never make unilateral design decisions.
-- Explain reasoning in plain English. Give 2–3 options with simple pros
-  and cons, recommend one, and wait for the founder's reply.
+- Explain in plain English. Give 2–3 options with pros and cons, recommend one, wait.
 - One verifiable step at a time, commands explained. Founder only talks to
   Claude: do all possible in repo/cloud; local = one paste + Yes.
 
