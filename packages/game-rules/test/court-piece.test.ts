@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import { cardId, type Card, type Suit } from '../src/cards.js';
 import {
   IllegalPlayError,
-  chooseTrump,
   createCourtPieceMatch,
   legalPlaysFor,
   playCard,
@@ -12,7 +11,16 @@ import {
   type CourtPieceMatch,
 } from '../src/court-piece-match.js';
 import { legalPlays, trickWinner } from '../src/court-piece-rules.js';
-import { COURT_PIECE_VARIANTS, nextSeat, partnerOf, rankValue, seatTeam } from '../src/court-piece.js';
+import {
+  COURT_PIECE_PRIVATE_BEST_OF,
+  COURT_PIECE_PUBLIC_BEST_OF,
+  COURT_PIECE_VARIANTS,
+  classifyDeal,
+  nextSeat,
+  partnerOf,
+  rankValue,
+  seatTeam,
+} from '../src/court-piece.js';
 
 const c = (rank: Card['rank'], suit: Suit): Card => ({ rank, suit });
 const fixedRandom = () => 0.5;
@@ -27,6 +35,16 @@ test('ranking is ace high; partners sit opposite; play goes round in order', () 
   assert.equal(partnerOf(1), 3);
   assert.equal(nextSeat(3), 0);
   assert.deepEqual(COURT_PIECE_VARIANTS.map((v) => v.id), ['single_siri', 'double_siri', 'blind_rang']);
+  assert.deepEqual(COURT_PIECE_PRIVATE_BEST_OF, [1, 3, 5]);
+  assert.equal(COURT_PIECE_PUBLIC_BEST_OF, 1);
+});
+
+test('deal results: win, kot by the trump-setting team, goon kot by the other team', () => {
+  assert.deepEqual(classifyDeal([7, 6], 1), { winner: 0, result: 'win' });
+  assert.deepEqual(classifyDeal([13, 0], 0), { winner: 0, result: 'kot' });
+  assert.deepEqual(classifyDeal([13, 0], 1), { winner: 0, result: 'goon_kot' });
+  assert.deepEqual(classifyDeal([0, 13], 1), { winner: 1, result: 'kot' });
+  assert.deepEqual(classifyDeal([13, 0], null), { winner: 0, result: 'kot' }, 'nobody ever cut');
 });
 
 // ---------------------------------------------------------------- trick rules
@@ -57,47 +75,40 @@ test('trick winner: highest of led suit, unless trumped; highest trump wins', ()
   assert.equal(trickWinner(trumped, 'spades'), 3, 'highest trump beats the ace of the led suit');
 });
 
-// ---------------------------------------------------------------- deal and trump
+// ---------------------------------------------------------------- deal
 
-test('the caller sees five cards, names trump, then everyone has thirteen', () => {
+test('everyone gets thirteen cards, nobody calls trump, the dealer\'s right leads', () => {
   const match = createCourtPieceMatch(2, { variant: 'single_siri' }, fixedRandom);
-  assert.equal(match.caller, 3, 'player to the dealer\'s right');
-  assert.equal(match.phase, 'choosing_trump');
-  assert.deepEqual(match.hands.map((h) => h.length), [5, 5, 5, 5]);
-  assert.equal(match.undealt.length, 32);
-  assert.deepEqual(legalPlaysFor(match, 3), [], 'nobody plays before trump');
+  assert.equal(match.leader, 3, 'player to the dealer\'s right');
+  assert.equal(match.current, 3);
+  assert.equal(match.phase, 'playing');
+  assert.equal(match.trump, null);
+  assert.equal(match.trumpSetter, null);
+  assert.deepEqual(match.hands.map((h) => h.length), [13, 13, 13, 13]);
+  const all = new Set(match.hands.flat().map(cardId));
+  assert.equal(all.size, 52, 'every card dealt exactly once');
+  assert.deepEqual(legalPlaysFor(match, 0), [], 'not the leader');
+  assert.equal(legalPlaysFor(match, 3).length, 13, 'the leader may play anything');
 
-  assert.throws(() => chooseTrump(match, 0, 'hearts'), IllegalPlayError, 'only the caller');
-  const playing = chooseTrump(match, 3, 'hearts');
-  assert.equal(playing.trump, 'hearts');
-  assert.equal(playing.phase, 'playing');
-  assert.deepEqual(playing.hands.map((h) => h.length), [13, 13, 13, 13]);
-  assert.equal(playing.undealt.length, 0);
-  assert.equal(playing.current, 3, 'the caller leads');
-  assert.equal(match.phase, 'choosing_trump', 'input untouched');
-
-  const view = viewForSeat(playing, 0);
+  const view = viewForSeat(match, 0);
   assert.equal(view.hand.length, 13);
   assert.deepEqual(view.handCounts, [13, 13, 13, 13]);
 });
 
-// ---------------------------------------------------------------- playing helpers
+// ---------------------------------------------------------------- helpers
 
-/** Deal a rigged hand so tests can script tricks. Seat 0 leads. */
-function rigged(variant: CourtPieceMatch['settings']['variant'], hands: Card[][], trump: Suit | null, opts: { tricksToWin?: number } = {}): CourtPieceMatch {
-  const base = createCourtPieceMatch(3, { variant, tricksToWin: opts.tricksToWin }, fixedRandom);
-  return {
-    ...base,
-    phase: 'playing',
-    hands: hands.map((h) => h.slice()),
-    undealt: [],
-    trump,
-    caller: 0,
-    current: 0,
-  };
+/** A match with scripted hands. Seat 0 leads. Trump may be preset for late-deal tests. */
+function rigged(
+  variant: CourtPieceMatch['settings']['variant'],
+  hands: Card[][],
+  trump: Suit | null = null,
+  trumpSetter: number | null = null,
+): CourtPieceMatch {
+  const base = createCourtPieceMatch(3, { variant }, fixedRandom);
+  return { ...base, hands: hands.map((h) => h.slice()), trump, trumpSetter, leader: 0, current: 0 };
 }
 
-/** Play one full trick: each seat plays the given card, in seat order from the leader. */
+/** Play one full trick: each seat in turn plays the given card, starting from whoever leads. */
 function playTrick(match: CourtPieceMatch, cards: Card[]) {
   let m = match;
   let last;
@@ -110,6 +121,10 @@ function playTrick(match: CourtPieceMatch, cards: Card[]) {
   return { match: m, result: last! };
 }
 
+const OFF = (i: number): Card['rank'] => (['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'] as const)[i];
+
+// ---------------------------------------------------------------- play
+
 test('turn order, follow-suit enforcement, and refusing out-of-turn plays', () => {
   const hands = [
     [c('A', 'spades'), c('2', 'hearts')],
@@ -117,7 +132,7 @@ test('turn order, follow-suit enforcement, and refusing out-of-turn plays', () =
     [c('4', 'hearts'), c('5', 'hearts')],
     [c('Q', 'spades'), c('6', 'hearts')],
   ];
-  const match = rigged('single_siri', hands, 'diamonds');
+  const match = rigged('single_siri', hands, 'diamonds', 1);
   assert.throws(() => playCard(match, 1, c('K', 'spades')), IllegalPlayError, 'not your turn');
 
   const after0 = playCard(match, 0, c('A', 'spades')).match;
@@ -131,39 +146,79 @@ test('turn order, follow-suit enforcement, and refusing out-of-turn plays', () =
   assert.equal(done.current, 0, 'winner leads next');
   assert.deepEqual(done.collected, [1, 0], 'single siri: straight to the team');
   assert.equal(done.trick.length, 0);
+  assert.equal(match.trick.length, 0, 'input untouched');
 });
 
-test('single siri: the first team to the target wins; taking everything is a kot', () => {
-  // Team 0 (seats 0 and 2) holds every spade and leads them; trump is spades.
-  const spades: Card['rank'][] = ['A', 'K', 'Q', 'J', '10', '9', '8'];
+test('the first card that cannot follow suit sets the trump and wins that trick', () => {
+  const hands: Card[][] = [
+    [c('9', 'hearts'), c('2', 'clubs')],
+    [c('K', 'hearts'), c('3', 'clubs')],
+    [c('4', 'diamonds'), c('5', 'clubs')], // no hearts: the diamond will set trump
+    [c('10', 'hearts'), c('6', 'clubs')],
+  ];
+  let m = rigged('single_siri', hands);
+  m = playCard(m, 0, c('9', 'hearts')).match;
+  m = playCard(m, 1, c('K', 'hearts')).match;
+  assert.equal(m.trump, null, 'following suit never sets trump');
+  const cut = playCard(m, 2, c('4', 'diamonds'));
+  assert.equal(cut.trumpSetTo, 'diamonds');
+  assert.equal(cut.match.trump, 'diamonds');
+  assert.equal(cut.match.trumpSetter, 2);
+  const done = playCard(cut.match, 3, c('10', 'hearts'));
+  assert.equal(done.trick?.winner, 2, 'the fresh trump takes the trick');
+});
+
+/**
+ * Team 0 holds every spade (trump) and every diamond; team 1 holds only
+ * hearts and clubs. Team 0 leads and wins all thirteen tricks.
+ */
+function allSpadesDeal(variant: CourtPieceMatch['settings']['variant'], trumpSetter: number) {
   const hands: Card[][] = [[], [], [], []];
-  spades.forEach((rank, i) => {
-    hands[0].push(c(rank, 'spades'));
-    hands[1].push(c(['2', '3', '4', '5', '6', '7', '8'][i] as Card['rank'], 'hearts'));
-    hands[2].push(c(['2', '3', '4', '5', '6', '7', '8'][i] as Card['rank'], 'diamonds'));
-    hands[3].push(c(['2', '3', '4', '5', '6', '7', '8'][i] as Card['rank'], 'clubs'));
-  });
-  let match = rigged('single_siri', hands, 'spades', { tricksToWin: 7 });
-  for (let i = 0; i < 7; i++) {
-    const { match: m, result } = playTrick(match, [hands[0][i], hands[1][i], hands[2][i], hands[3][i]]);
-    match = m;
-    assert.equal(result.trick?.winner, 0);
+  for (let i = 0; i < 13; i++) {
+    hands[i < 7 ? 0 : 2].push(c(OFF(i), 'spades'));
+    hands[i < 6 ? 0 : 2].push(c(OFF(i), 'diamonds'));
+    hands[1].push(c(OFF(i), 'hearts'));
+    hands[3].push(c(OFF(i), 'clubs'));
   }
+  assert.deepEqual(hands.map((h) => h.length), [13, 13, 13, 13]);
+  return rigged(variant, hands, 'spades', trumpSetter);
+}
+
+/** Play out a deal card by card, always choosing the first legal card (a spade when allowed). */
+function playOut(match: CourtPieceMatch) {
+  let m = match;
+  const results = [];
+  while (m.phase === 'playing') {
+    const legal = legalPlaysFor(m, m.current);
+    const card = legal.find((x) => x.suit === 'spades') ?? legal[0];
+    const r = playCard(m, m.current, card);
+    m = r.match;
+    if (r.trick) results.push(r);
+  }
+  return { match: m, results };
+}
+
+test('a deal runs all thirteen tricks; the winner is known at seven; all thirteen is a kot or a goon kot', () => {
+  let { match, results } = playOut(allSpadesDeal('single_siri', 0));
+  assert.equal(results[6].match.winner, 0, 'decided at the seventh trick');
+  assert.equal(results[6].match.phase, 'playing', 'but the deal continues');
   assert.equal(match.phase, 'finished');
-  assert.equal(match.winner, 0);
-  assert.equal(match.kot, true, 'seven straight with nothing for the other side');
+  assert.deepEqual(match.collected, [13, 0]);
+  assert.equal(match.result, 'kot', 'the trump-setting team took everything');
+
+  ({ match } = playOut(allSpadesDeal('single_siri', 1)));
+  assert.equal(match.result, 'goon_kot', 'the other team took everything');
   assert.deepEqual(legalPlaysFor(match, 0), [], 'no more play');
 });
 
-test('double siri: tricks pile up; the same player twice in a row collects the pile (not after tricks 1 or 2)', () => {
-  // Seat 0 wins trick 1 and 2 with top spades (no collection yet), seat 1 wins 3, seat 0 wins 4 and 5 (collects on 5).
+test('double siri: tricks pile up; the same player twice in a row collects (not after tricks 1 or 2)', () => {
   const hands: Card[][] = [
     [c('A', 'spades'), c('K', 'spades'), c('2', 'hearts'), c('Q', 'spades'), c('J', 'spades')],
     [c('3', 'clubs'), c('4', 'clubs'), c('A', 'hearts'), c('5', 'clubs'), c('6', 'clubs')],
     [c('3', 'diamonds'), c('4', 'diamonds'), c('5', 'hearts'), c('5', 'diamonds'), c('6', 'diamonds')],
     [c('7', 'clubs'), c('8', 'clubs'), c('6', 'hearts'), c('9', 'clubs'), c('10', 'clubs')],
   ];
-  let match = rigged('double_siri', hands, 'spades');
+  let match = rigged('double_siri', hands, 'spades', 0);
 
   let r = playTrick(match, [c('A', 'spades'), c('3', 'clubs'), c('3', 'diamonds'), c('7', 'clubs')]);
   match = r.match;
@@ -176,44 +231,26 @@ test('double siri: tricks pile up; the same player twice in a row collects the p
   assert.equal(match.heap, 2, 'two in a row, but never after trick 2');
   assert.deepEqual(match.collected, [0, 0]);
 
-  // Seat 0 leads a low heart; seat 1 takes it with the ace.
   r = playTrick(match, [c('2', 'hearts'), c('A', 'hearts'), c('5', 'hearts'), c('6', 'hearts')]);
   match = r.match;
   assert.equal(r.result.trick?.winner, 1);
   assert.equal(match.heap, 3);
-  assert.equal(match.current, 1);
 
-  // Seat 1 leads clubs; seat 0 trumps and wins trick 4, then trick 5: collects all five.
   r = playTrick(match, [c('5', 'clubs'), c('5', 'diamonds'), c('9', 'clubs'), c('Q', 'spades')]);
   match = r.match;
   assert.equal(r.result.trick?.winner, 0);
   assert.equal(match.heap, 4);
   r = playTrick(match, [c('J', 'spades'), c('6', 'clubs'), c('6', 'diamonds'), c('10', 'clubs')]);
   match = r.match;
-  assert.equal(r.result.trick?.winner, 0);
   assert.deepEqual(r.result.collectedBy, { team: 0, count: 5 });
   assert.equal(match.heap, 0);
   assert.deepEqual(match.collected, [5, 0]);
 });
 
-test('blind rang: no trump until someone cannot follow suit; that card sets it', () => {
-  const match = createCourtPieceMatch(0, { variant: 'blind_rang' }, fixedRandom);
-  assert.equal(match.phase, 'playing', 'no calling phase');
-  assert.equal(match.trump, null);
-  assert.deepEqual(match.hands.map((h) => h.length), [13, 13, 13, 13]);
-
-  const hands: Card[][] = [
-    [c('9', 'hearts'), c('2', 'clubs')],
-    [c('K', 'hearts'), c('3', 'clubs')],
-    [c('4', 'diamonds'), c('5', 'clubs')], // no hearts: the diamond will set trump
-    [c('10', 'hearts'), c('6', 'clubs')],
-  ];
-  let m = rigged('blind_rang', hands, null);
-  m = playCard(m, 0, c('9', 'hearts')).match;
-  m = playCard(m, 1, c('K', 'hearts')).match;
-  const cut = playCard(m, 2, c('4', 'diamonds'));
-  assert.equal(cut.trumpSetTo, 'diamonds');
-  assert.equal(cut.match.trump, 'diamonds');
-  const done = playCard(cut.match, 3, c('10', 'hearts'));
-  assert.equal(done.trick?.winner, 2, 'the fresh trump takes the trick');
+test('double siri: the winner of the thirteenth trick takes whatever is left', () => {
+  const { match } = playOut(allSpadesDeal('double_siri', 0));
+  assert.equal(match.phase, 'finished');
+  assert.equal(match.heap, 0);
+  assert.deepEqual(match.collected, [13, 0], 'every trick ends up with somebody');
+  assert.equal(match.result, 'kot');
 });

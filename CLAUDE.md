@@ -9,8 +9,7 @@
   and cons, recommend one, and wait for the founder's reply.
 - Go step by step. One small, verifiable step at a time.
 - Terminal commands: list them in order, explain what each one does.
-- Founder prefers to only talk to Claude: do all possible in repo/cloud;
-  their local steps = one paste plus clicking Yes.
+- Founder only talks to Claude: do all possible in repo/cloud; local = one paste + Yes.
 
 ## 2. What Gamenite is
 iOS-first mobile multiplayer board/card game platform.
@@ -54,14 +53,12 @@ iOS-first mobile multiplayer board/card game platform.
   unlimited, extra minutes for coins, server meters minutes. Wrap the SDK.
 - Auth/DB/storage: **Supabase** (Postgres + Auth + Storage). Coin ledger
   is SQL: one row per coin movement, written ONLY by the server.
-- Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Sign in
-  with Apple (required by Apple when any social login exists), Google,
-  Facebook incl. Facebook friends who also play (`user_friends`, needs
-  Meta App Review + data-deletion URL). Setup guide: `docs/ACCOUNTS.md`.
+- Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Apple
+  (required with any social login), Google, Facebook incl. Facebook friends
+  who also play (`user_friends`, Meta review + data-deletion URL). `docs/ACCOUNTS.md`.
 - Friends (DECIDED): Gamenite's own friends list (add by player code or
   username) plus Facebook friends as an importer on top.
-- Party (DECIDED): PUBG style. Leader creates a party with a join code,
-  friends join by code, each taps Ready, ONLY the leader launches.
+- Party (DECIDED): PUBG style. Leader makes a code, friends join, all Ready, leader launches.
 - Bundle id `app.plamenite.gamenite` (iOS + Android); domain plamenite.app,
   spelling CONFIRMED 2026-09-22. Proposed, undecided: AdMob ads, RevenueCat IAP.
 
@@ -78,20 +75,23 @@ iOS-first mobile multiplayer board/card game platform.
   (own board layout, never regenerate casually), `FiveRowRoom` (hands sent
   privately, crypto RNG, 30 s turns (DECIDED), timeout → random legal
   move, 3 in a row → seat abandoned, last team present wins), phone board
-  `components/fiverow-board.tsx`. Interview (DECIDED): tables 1v1, 3 players,
-  2v2; standard hand sizes and runs-to-win.
-- Court Piece engine core in `game-rules/src/court-piece-*.ts` (5+4+4 deal,
-  caller = dealer's right, follow suit, trick winner, single/double siri
-  collection per documented rules, blind rang = first off-suit card sets
-  trump, win at 7, kot). Variants + dealer rotation await the interview.
+  `components/fiverow-board.tsx`. DECIDED: tables 1v1, 3p, 2v2; standard
+  hand sizes and runs-to-win.
+- Court Piece engine `game-rules/src/court-piece-*.ts`. FOUNDER'S RULES:
+  nobody calls trump; the first card played off-suit sets it and that team
+  "called" it; every deal runs all 13 tricks; 7 = win, 13 by the calling
+  team = kot, 13 by the other team = goon kot; private tables best of
+  1/3/5 deals, public tables 1 deal + rematch. Double siri = documented
+  pile rule (CONFIRM). Blind rang difference, kot value in a series, and
+  who leads the next deal: PENDING interview round two.
 - Skeleton (done, pre-login): `PartyRoom` (create/join by code, Ready,
   leader-only launch → seat reservations in a `FiveRowRoom`). App: Play tab
   (`use-party`/`use-fiverow`), TEMPORARY guest token `src/lib/guest.ts`.
   Server verifies Supabase JWTs (`src/auth.ts`; guests only if
   ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
 - Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches
-  `metadata.code` (plain keys, no dot notation). Room tests share ONE booted
-  test server in `test/rooms.test.ts`; two boots per process break it.
+  `metadata.code` (plain keys, no dots). Room tests share ONE booted test
+  server (`test/rooms.test.ts`); two boots per process break matchmaking.
 
 ## 7. Project conventions
 - Founder: Windows PC (58 GB free, normal setup) daily; MacBook Air for Xcode.

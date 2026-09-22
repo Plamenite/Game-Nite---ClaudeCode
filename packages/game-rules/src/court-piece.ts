@@ -12,11 +12,38 @@ export const COURT_PIECE_TEAMS = 2;
 export const COURT_PIECE_DECK_COUNT = 1;
 export const COURT_PIECE_HAND_SIZE = 13;
 
-/** Dealt as 5 first (trump is called on those), then 4 and 4. */
-export const COURT_PIECE_DEAL_BATCHES: readonly number[] = [5, 4, 4];
-
-/** Tricks a team must collect to win a deal. */
+/** Tricks a team must collect to win a deal. The deal still runs to 13. */
 export const COURT_PIECE_TRICKS_TO_WIN = 7;
+export const COURT_PIECE_TOTAL_TRICKS = 13;
+
+/**
+ * FOUNDER'S RULES (2026-09-22): nobody calls trump. All 13 cards are dealt
+ * and the deal starts with no trump. The first time any player cannot
+ * follow suit, the card they play sets the trump for the rest of the deal,
+ * and their team becomes the "trump-calling" team for kot purposes.
+ */
+export type DealResult =
+  /** A team collected 7 or more, but not all 13. */
+  | 'win'
+  /** All 13 tricks by the team that set the trump. */
+  | 'kot'
+  /** All 13 tricks by the team that did NOT set the trump. */
+  | 'goon_kot';
+
+export function classifyDeal(collected: readonly [number, number], trumpSetterTeam: number | null): { winner: number; result: DealResult } {
+  const winner = collected[0] > collected[1] ? 0 : 1;
+  if (collected[winner] < COURT_PIECE_TOTAL_TRICKS) return { winner, result: 'win' };
+  // CONFIRM: a deal where nobody ever cut (no trump) and one team took all 13 counts as a kot.
+  if (trumpSetterTeam === null || trumpSetterTeam === winner) return { winner, result: 'kot' };
+  return { winner, result: 'goon_kot' };
+}
+
+/**
+ * Match length (DECIDED): private tables pick best of 1, 3 or 5 deals;
+ * public tables play one deal, then offer a rematch.
+ */
+export const COURT_PIECE_PRIVATE_BEST_OF: readonly number[] = [1, 3, 5];
+export const COURT_PIECE_PUBLIC_BEST_OF = 1;
 
 /** Ace high, two low. */
 export const COURT_PIECE_RANK_ORDER: readonly Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
@@ -39,9 +66,10 @@ export interface CourtPieceVariantInfo {
 }
 
 export const COURT_PIECE_VARIANTS: readonly CourtPieceVariantInfo[] = [
-  { id: 'single_siri', name: 'Single Siri', summary: 'Classic Rang. Every trick goes straight to the team that won it.' },
+  { id: 'single_siri', name: 'Single Siri', summary: 'Every trick goes straight to the team that won it.' },
   { id: 'double_siri', name: 'Double Siri', summary: 'Tricks pile up in the middle until one player wins two in a row.' },
-  { id: 'blind_rang', name: 'Blind Rang', summary: 'No trump is called. The first card played off-suit sets the trump.' },
+  // CONFIRM: what makes Blind Rang different at the founder's tables. Behaves like Single Siri until then.
+  { id: 'blind_rang', name: 'Blind Rang', summary: 'Rules pending the founder\'s answer.' },
 ];
 
 /** Seats 0..3 in play order (to the right). Partners sit opposite. */
