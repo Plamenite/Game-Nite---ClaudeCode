@@ -52,8 +52,13 @@ iOS-first mobile multiplayer board/card game platform.
 - Frontend framework: **React Native + Expo (TypeScript)** — DECIDED.
   Reason: one codebase for iOS now and Android soon; Expo EAS builds iOS
   in the cloud so the founder can work from Windows.
-- Real-time game-state backend: TBD
-- Voice chat provider: TBD
+- Real-time game server: **Colyseus (TypeScript)** — DECIDED. Server is
+  authoritative: it deals, hides hands, validates moves, syncs state.
+- Voice chat: **Agora** — DECIDED. Cost rule: Agora bills every minute a
+  user is connected, muted or not (~$0.99/1k min after 10k free/month).
+  So: voice is opt-in, auto-leave when idle/backgrounded, and heavy voice
+  use must be paid for by ads/VIP. Wrap the SDK behind our own
+  VoiceService interface so the provider can be swapped later.
 - Auth / database / storage: TBD
 Do not scaffold or write app code until these are agreed with the founder.
 
