@@ -48,7 +48,7 @@ iOS-first mobile multiplayer board/card game platform.
 - Android is a confirmed second target (very important to the founder),
   but never a reason to compromise the iOS build.
 
-## 5. Tech stack — DECIDED VIA INTERVIEW (update when chosen)
+## 5. Tech stack — DECIDED with the founder on 2026-09-22
 - Frontend framework: **React Native + Expo (TypeScript)** — DECIDED.
   Reason: one codebase for iOS now and Android soon; Expo EAS builds iOS
   in the cloud so the founder can work from Windows.
@@ -59,8 +59,14 @@ iOS-first mobile multiplayer board/card game platform.
   So: voice is opt-in, auto-leave when idle/backgrounded, and heavy voice
   use must be paid for by ads/VIP. Wrap the SDK behind our own
   VoiceService interface so the provider can be swapped later.
-- Auth / database / storage: TBD
-Do not scaffold or write app code until these are agreed with the founder.
+- Auth / database / storage: **Supabase** — DECIDED. Postgres + Auth
+  (Sign in with Apple, Google, phone) + Storage. The coin ledger is SQL:
+  one row per coin movement, written ONLY by the server, never the app.
+- Voice policy (Shape A, agreed): voice OFF by default and opt-in; small
+  free daily allowance per player; VIP subscription = unlimited; extra
+  minutes buyable with coins; server meters every player's minutes.
+- Proposed, not yet decided: AdMob for ads, RevenueCat for IAP/VIP.
+- Still to confirm with founder: repo layout and iOS bundle identifier.
 
 ## 6. Project conventions
 - Founder's machines: Windows PC daily; a ~2024 MacBook Air is available
