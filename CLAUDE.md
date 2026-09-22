@@ -45,16 +45,21 @@ iOS-first mobile multiplayer board/card game platform.
   Xcode build, iPhone screen sizes, Safe Areas, Dark Mode, TestFlight.
 - Prefer approaches that keep the iOS build simple and App Store-ready.
 - Check every dependency for iOS support before adopting it.
-- Android is a possible future target, never a reason to compromise iOS.
+- Android is a confirmed second target (very important to the founder),
+  but never a reason to compromise the iOS build.
 
 ## 5. Tech stack — DECIDED VIA INTERVIEW (update when chosen)
-- Frontend framework: TBD
+- Frontend framework: **React Native + Expo (TypeScript)** — DECIDED.
+  Reason: one codebase for iOS now and Android soon; Expo EAS builds iOS
+  in the cloud so the founder can work from Windows.
 - Real-time game-state backend: TBD
 - Voice chat provider: TBD
 - Auth / database / storage: TBD
 Do not scaffold or write app code until these are agreed with the founder.
 
 ## 6. Project conventions
+- Founder's machines: Windows PC daily; a ~2024 MacBook Air is available
+  when Xcode is truly needed (simulator, native debugging).
 - Branch for current work: `claude/modest-gates-unuglw`.
 - Commit small and often with clear, plain-English messages.
 - Keep this file under 100 lines. Update it when decisions are made.
