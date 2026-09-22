@@ -10,6 +10,8 @@ import {
   SKELETON_PARTY_SIZE,
   canLaunchParty,
   fiverowConfigForPlayers,
+  isTeamGame,
+  seatsForParty,
   type PartyGameChoice,
   generatePartyCode,
   normalizePartyCode,
@@ -63,6 +65,15 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
       }
     },
 
+    [PARTY_MESSAGES.setTeam]: (client: Client, payload: { sessionId?: string; team?: number } | undefined) => {
+      if (client.sessionId !== this.state.leaderSessionId) return this.refuse(client, "Only the party leader assigns teams.");
+      if (this.state.status !== "open") return;
+      const member = payload?.sessionId ? this.state.members.get(payload.sessionId) : undefined;
+      const team = Number(payload?.team);
+      if (!member || (team !== 0 && team !== 1)) return this.refuse(client, "Pick a member and a side.");
+      member.team = team;
+    },
+
     [PARTY_MESSAGES.launch]: async (client: Client) => {
       await this.launch(client);
     },
@@ -88,6 +99,7 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
 
     const member = new PartyMember();
     member.name = sanitizeDisplayName(options?.name);
+    member.team = this.state.members.size % 2; // alternate sides; the leader can change it
     this.state.members.set(client.sessionId, member);
 
     if (isCreator) {
@@ -120,10 +132,13 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
       return this.refuse(leader, "Only the party leader can launch.");
     }
 
-    const members = [...this.state.members.values()];
+    const members = [...this.state.members.entries()].map(([sessionId, m]) => ({ sessionId, ready: m.ready, team: m.team }));
     if (!canLaunchParty(members, this.state.status, this.state.game)) {
-      return this.refuse(leader, this.state.game === "courtpiece" ? "Court Piece needs exactly 4 ready players." : "Everyone must be ready first.");
+      if (this.state.game === "courtpiece" && members.length !== 4) return this.refuse(leader, "Court Piece needs exactly 4 ready players.");
+      if (isTeamGame(this.state.game, members.length) && members.every((m) => m.ready)) return this.refuse(leader, "Teams must be two against two.");
+      return this.refuse(leader, "Everyone must be ready first.");
     }
+    const seats = seatsForParty(members, this.state.game);
 
     this.state.status = "launching";
     try {
@@ -140,14 +155,14 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
           this.state.status = "open";
           return this.refuse(leader, "Five Row needs 2, 3 or 4 players.");
         }
-        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players });
+        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players, launchSecret: LAUNCH_SECRET });
       }
 
       // Reserve one seat per member and hand each phone its own reservation.
       for (const client of this.clients) {
         const member = this.state.members.get(client.sessionId);
         if (!member) { continue; }
-        const reservation = await matchMaker.reserveSeatFor(table, { name: member.name }, client.auth);
+        const reservation = await matchMaker.reserveSeatFor(table, { name: member.name, seat: seats.get(client.sessionId) }, client.auth);
         client.send(PARTY_EVENTS.tableReady, reservation);
       }
 

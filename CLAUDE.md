@@ -15,10 +15,9 @@
 iOS-first mobile multiplayer board/card game platform.
 
 ### Games
-1. **Five Row** (id `fiverow`; display name placeholder "Jack Streak",
-   founder picks the final). Resembles a classic board game whose name is
-   TRADEMARKED (Jax/Goliath): NEVER use that name in code, UI, or store
-   copy. 10x10 board, two-eyed Jacks wild, one-eyed Jacks remove a chip.
+1. **Five Row** (id `fiverow`; display name placeholder "Jack Streak").
+   Resembles a classic board game whose name is TRADEMARKED (Jax/Goliath):
+   NEVER use it in code, UI, or store copy. 10x10 board, Jacks wild/remove.
 2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game. Two
    games: Single Siri and Double Siri; "blind" first-cut trump in both.
 
@@ -55,8 +54,7 @@ iOS-first mobile multiplayer board/card game platform.
 - Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Apple
   (required with any social login), Google, Facebook incl. Facebook friends
   who also play (`user_friends`, Meta review + data-deletion URL). `docs/ACCOUNTS.md`.
-- Friends (DECIDED): Gamenite's own friends list (add by player code or
-  username) plus Facebook friends as an importer on top.
+- Friends (DECIDED): Gamenite's own list (add by code/username) + Facebook importer.
 - Party (DECIDED): PUBG style. Leader makes a code, friends join, all Ready, leader launches.
 - Bundle id `app.plamenite.gamenite`; domain plamenite.app (CONFIRMED). Undecided: AdMob, RevenueCat.
 
@@ -74,9 +72,10 @@ iOS-first mobile multiplayer board/card game platform.
   turns, timeout → random legal move, 3 in a row → abandoned, last team
   present wins), board `components/fiverow-board.tsx`. DECIDED: 1v1, 3p,
   2v2; standard hand sizes and runs-to-win.
-- Court Piece (ALL RULES DECIDED): engine `game-rules/src/court-piece-*.ts`,
-  `CourtPieceRoom` live (private hands, 30 s auto-play, forfeit when a whole
-  team abandons, series + rematch); phone screen NOT built yet. Rules: 2♣
+- Court Piece LIVE end to end (ALL RULES DECIDED): engine
+  `game-rules/src/court-piece-*.ts`, `CourtPieceRoom` (private hands, 30 s
+  auto-play, forfeit when a whole team abandons, series + rematch), phone
+  screen `components/court-piece-table.tsx`. Rules: 2♣
   holder opens with 2♣; nobody calls trump, the first off-suit card sets it
   and that team "called" it; all 13 tricks played; 7 = win, 13 by callers =
   kot, by others = goon kot (each one series win). Single siri: tricks wait
@@ -84,8 +83,9 @@ iOS-first mobile multiplayer board/card game platform.
   Double siri: same player two in a row banks, never after tricks 1/2/12,
   only once trump exists, not two ace wins; 13th takes the rest. Private
   best of 1/3/5 (dealer rotates right), public best of 1 + rematch (all 4
-  agree). Party leader picks game/variant/best-of; launches use a
-  server-only LAUNCH_SECRET so phones cannot request a series.
+  agree). Party leader picks game/variant/best-of AND assigns teams (A/B,
+  two a side, partners opposite); launches carry a server-only
+  LAUNCH_SECRET so rooms trust the party's seats and series length.
 - Skeleton (done, pre-login): `PartyRoom` (code join, Ready, leader launch
   → seat reservations). App: Play tab (`use-party`/`use-fiverow`), TEMPORARY
   guest token `src/lib/guest.ts`. Server verifies Supabase JWTs (`src/auth.ts`;

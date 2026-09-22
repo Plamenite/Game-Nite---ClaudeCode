@@ -44,8 +44,10 @@ export interface CourtPieceRoomOptions {
   launchSecret?: string;
 }
 
+/** What the phone sends when joining; `seat` only counts on a party launch. */
 export interface CourtPieceJoinOptions {
   name?: string;
+  seat?: number;
 }
 
 /**
@@ -57,8 +59,10 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
   state = new CourtPieceState();
   maxClients = PLAYERS;
 
-  private order: string[] = [];
+  /** sessionId per seat, 0..3. */
+  private order: (string | undefined)[] = new Array(PLAYERS).fill(undefined);
   private seatOf = new Map<string, number>();
+  private trusted = false;
   private series: CourtPieceSeries | null = null;
   private match: CourtPieceMatch | null = null;
   private turnTimer?: Delayed;
@@ -83,22 +87,26 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
 
     this.state.variant = variant;
     this.state.bestOf = bestOf;
+    this.trusted = isTrustedLaunch(options);
     await this.setMetadata({ variant });
     // Tests shorten turns through the environment; clients cannot.
     this.turnSeconds = Number(process.env.COURTPIECE_TURN_SECONDS) || TURN_SECONDS;
   }
 
   onJoin(client: Client, options: CourtPieceJoinOptions | undefined) {
-    const seatIndex = this.order.length;
+    const wanted = Number(options?.seat);
+    const free = this.order.findIndex((id) => id === undefined);
+    const seatIndex = this.trusted && Number.isInteger(wanted) && wanted >= 0 && wanted < PLAYERS && this.order[wanted] === undefined ? wanted : free;
+
     const seat = new CourtPieceSeat();
     seat.name = sanitizeDisplayName(options?.name);
     seat.seat = seatIndex;
     seat.team = seatTeam(seatIndex);
     this.state.seats.set(client.sessionId, seat);
-    this.order.push(client.sessionId);
+    this.order[seatIndex] = client.sessionId;
     this.seatOf.set(client.sessionId, seatIndex);
 
-    if (this.order.length === PLAYERS) {
+    if (this.order.every((id) => id !== undefined)) {
       this.lock();
       this.series = createSeries(this.state.bestOf as CourtPieceBestOf, 0);
       this.startDeal();
@@ -124,13 +132,8 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
 
     if (this.state.phase === "waiting") {
       this.state.seats.delete(client.sessionId);
-      this.order = this.order.filter((id) => id !== client.sessionId);
+      this.order = this.order.map((id) => (id === client.sessionId ? undefined : id));
       this.seatOf.delete(client.sessionId);
-      this.order.forEach((id, i) => {
-        const s = this.state.seats.get(id);
-        if (s) { s.seat = i; s.team = seatTeam(i); }
-        this.seatOf.set(id, i);
-      });
       this.unlock();
       return;
     }
@@ -221,7 +224,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     const m = this.match;
     if (!m || this.state.phase !== "playing") return;
 
-    const sessionId = this.order[m.current];
+    const sessionId = this.order[m.current] ?? "";
     const seat = this.state.seats.get(sessionId);
     if (!seat || seat.abandoned) {
       this.state.turnDeadline = 0;
@@ -238,7 +241,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     const m = this.match;
     if (!m || this.state.phase !== "playing" || m.current !== seatIndex) return;
 
-    const sessionId = this.order[seatIndex];
+    const sessionId = this.order[seatIndex] ?? "";
     const seat = this.state.seats.get(sessionId);
     if (countsAsTimeout && seat) {
       seat.timeouts++;
@@ -322,9 +325,9 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     this.state.collected0 = m.collected[0];
     this.state.collected1 = m.collected[1];
     this.state.heap = m.heap;
-    this.state.turnSessionId = m.phase === "playing" ? this.order[m.current] : "";
+    this.state.turnSessionId = m.phase === "playing" ? this.order[m.current] ?? "" : "";
     m.hands.forEach((hand, i) => {
-      const seat = this.state.seats.get(this.order[i]);
+      const seat = this.state.seats.get(this.order[i] ?? "");
       if (seat) seat.handCount = hand.length;
     });
   }

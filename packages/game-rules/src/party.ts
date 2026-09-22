@@ -11,6 +11,8 @@ export const PARTY_MESSAGES = {
   setReady: 'set_ready',
   /** payload: PartyGameChoice. Only the leader may send it. */
   setGame: 'set_game',
+  /** payload: { sessionId: string; team: 0 | 1 }. Only the leader may send it. */
+  setTeam: 'set_team',
   /** payload: none. Only the leader may send it. */
   launch: 'launch',
 } as const;
@@ -91,6 +93,8 @@ export interface PartyMemberSnapshot {
   name: string;
   ready: boolean;
   isLeader: boolean;
+  /** 0 or 1. Assigned alternately on join; the leader can change it. */
+  team: number;
 }
 
 export interface PartySnapshot {
@@ -114,7 +118,7 @@ export interface PartyStateLike {
   variant: string;
   bestOf: number;
   members: {
-    forEach(cb: (member: { name: string; ready: boolean }, sessionId: string) => void): void;
+    forEach(cb: (member: { name: string; ready: boolean; team: number }, sessionId: string) => void): void;
   };
 }
 
@@ -127,9 +131,45 @@ export function partySizeAllowed(game: string, members: number): boolean {
   return members >= MIN_PARTY_MEMBERS_TO_LAUNCH && members <= 4;
 }
 
+/** Court Piece is always 2 vs 2; Five Row is 2 vs 2 only with four players. */
+export function isTeamGame(game: string, members: number): boolean {
+  return game === 'courtpiece' || (game === 'fiverow' && members === 4);
+}
+
+/** Two on each side, the leader's choice. */
+export function teamsBalanced(members: readonly { team: number }[]): boolean {
+  const a = members.filter((m) => m.team === 0).length;
+  const b = members.filter((m) => m.team === 1).length;
+  return a === b;
+}
+
 /** The one rule for launching, shared so the app can grey out the button honestly. */
-export function canLaunchParty(members: readonly { ready: boolean }[], status: string, game = 'fiverow'): boolean {
-  return status === 'open' && partySizeAllowed(game, members.length) && members.every((m) => m.ready);
+export function canLaunchParty(members: readonly { ready: boolean; team?: number }[], status: string, game = 'fiverow'): boolean {
+  if (status !== 'open' || !partySizeAllowed(game, members.length) || !members.some(Boolean)) return false;
+  if (!members.every((m) => m.ready)) return false;
+  if (isTeamGame(game, members.length)) {
+    return teamsBalanced(members.map((m) => ({ team: m.team ?? 0 })));
+  }
+  return true;
+}
+
+/**
+ * Seats at the table, in join order within each team so partners sit
+ * opposite: team 0 takes seats 0 and 2, team 1 takes seats 1 and 3.
+ * Solo games (Five Row 1v1 or three players) seat in join order.
+ */
+export function seatsForParty(members: readonly { sessionId: string; team: number }[], game: string): Map<string, number> {
+  const seats = new Map<string, number>();
+  if (!isTeamGame(game, members.length)) {
+    members.forEach((m, i) => seats.set(m.sessionId, i));
+    return seats;
+  }
+  const slots: Record<number, number[]> = { 0: [0, 2], 1: [1, 3] };
+  for (const m of members) {
+    const seat = slots[m.team]?.shift();
+    if (seat !== undefined) seats.set(m.sessionId, seat);
+  }
+  return seats;
 }
 
 export function toPartySnapshot(state: PartyStateLike): PartySnapshot {
@@ -140,6 +180,7 @@ export function toPartySnapshot(state: PartyStateLike): PartySnapshot {
       name: member.name,
       ready: member.ready,
       isLeader: sessionId === state.leaderSessionId,
+      team: member.team,
     });
   });
   return {

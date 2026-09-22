@@ -6,6 +6,7 @@ import {
   normalizePartyCode,
   partyJoinOptions,
   toPartySnapshot,
+  type PartyGameChoice,
   type PartySnapshot,
   type PartyStateLike,
 } from '@gamenite/game-rules';
@@ -103,6 +104,16 @@ export function useParty({ onTableReady }: UsePartyOptions) {
     roomRef.current?.send(PARTY_MESSAGES.launch, {});
   }, []);
 
+  /** Leader only: choose the game, variant and series length. */
+  const setGame = useCallback((choice: PartyGameChoice) => {
+    roomRef.current?.send(PARTY_MESSAGES.setGame, choice);
+  }, []);
+
+  /** Leader only: move a member to a side. */
+  const setTeam = useCallback((sessionId: string, team: 0 | 1) => {
+    roomRef.current?.send(PARTY_MESSAGES.setTeam, { sessionId, team });
+  }, []);
+
   const leave = useCallback(async () => {
     const room = roomRef.current;
     roomRef.current = null;
@@ -119,5 +130,5 @@ export function useParty({ onTableReady }: UsePartyOptions) {
     };
   }, []);
 
-  return { status, snapshot, error, notice, sessionId, create, join, setReady, launch, leave };
+  return { status, snapshot, error, notice, sessionId, create, join, setReady, launch, setGame, setTeam, leave };
 }

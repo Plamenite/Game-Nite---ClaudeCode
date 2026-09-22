@@ -23,20 +23,23 @@ import {
   type FiveRowTableConfig,
 } from "@gamenite/game-rules";
 import { authenticate } from "../auth.js";
+import { isTrustedLaunch } from "../launch.js";
 import { FiveRowRun, FiveRowSeat, FiveRowState } from "./schema/FiveRowState.js";
 
 /** Unpredictable dealing: never Math.random on the server. randomInt's range must stay below 2^48. */
 const RANDOM_RANGE = 2 ** 48 - 1;
 const secureRandom = () => randomInt(0, RANDOM_RANGE) / RANDOM_RANGE;
 
-/** Set by a party launch or by quick play. */
+/** Set by a party launch (trusted) or by quick play. */
 export interface FiveRowRoomOptions {
   players?: number;
+  launchSecret?: string;
 }
 
-/** What the phone sends when joining. */
+/** What the phone sends when joining; `seat` only counts on a party launch. */
 export interface FiveRowJoinOptions {
   name?: string;
+  seat?: number;
 }
 
 /**
@@ -49,8 +52,10 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
 
   private config: FiveRowTableConfig = FIVEROW_TABLE_CONFIGS[0];
   private match: FiveRowMatch | null = null;
-  /** sessionIds in seat order; teammates alternate. */
-  private order: string[] = [];
+  /** sessionId per seat; teammates alternate (seat % teams). */
+  private order: (string | undefined)[] = [];
+  /** A party launch may place players in chosen seats. */
+  private trusted = false;
   private turnTimer?: Delayed;
   private turnSeconds = FIVEROW_TURN_SECONDS;
 
@@ -65,6 +70,8 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
   async onCreate(options: FiveRowRoomOptions | undefined) {
     this.config = fiverowConfigForPlayers(Number(options?.players ?? 2)) ?? FIVEROW_TABLE_CONFIGS[0];
     this.maxClients = this.config.players;
+    this.trusted = isTrustedLaunch(options);
+    this.order = new Array(this.config.players).fill(undefined);
     // Quick play filters on this so 1v1 seekers never land at a 2v2 table.
     await this.setMetadata({ players: this.config.players });
     this.state.players = this.config.players;
@@ -78,13 +85,17 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
   }
 
   onJoin(client: Client, options: FiveRowJoinOptions | undefined) {
+    const wanted = Number(options?.seat);
+    const free = this.order.findIndex((id) => id === undefined);
+    const index = this.trusted && Number.isInteger(wanted) && wanted >= 0 && wanted < this.order.length && this.order[wanted] === undefined ? wanted : free;
+
     const seat = new FiveRowSeat();
     seat.name = sanitizeDisplayName(options?.name);
-    seat.team = this.order.length % this.config.teams;
+    seat.team = index % this.config.teams;
     this.state.seats.set(client.sessionId, seat);
-    this.order.push(client.sessionId);
+    this.order[index] = client.sessionId;
 
-    if (this.state.seats.size === this.maxClients) {
+    if (this.order.every((id) => id !== undefined)) {
       this.lock();
       this.startMatch();
     }
@@ -111,7 +122,7 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
     if (this.state.phase === "waiting") {
       // Free the seat for someone else.
       this.state.seats.delete(client.sessionId);
-      this.order = this.order.filter((id) => id !== client.sessionId);
+      this.order = this.order.map((id) => (id === client.sessionId ? undefined : id));
       this.unlock();
       return;
     }
@@ -133,7 +144,7 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
   // ------------------------------------------------------------ match flow
 
   private startMatch() {
-    this.match = createFiveRowMatch(this.order, { teams: this.config.teams }, secureRandom);
+    this.match = createFiveRowMatch(this.order as string[], { teams: this.config.teams }, secureRandom);
     this.state.phase = "playing";
     this.afterChange();
   }

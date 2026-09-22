@@ -366,6 +366,61 @@ describe("CourtPieceRoom (a live game)", () => {
     }
   });
 
+  it("the leader assigns teams; launch needs two a side; seats follow the teams with partners opposite", async () => {
+    const party = await colyseus.createRoom<PartyState>("party", {});
+    const leader = await colyseus.connectTo(party, { name: "Zain" });
+    const others = [];
+    for (const name of ["Ali", "Sara", "Bilal"]) {
+      others.push(await colyseus.sdk.join<PartyState>("party", partyJoinOptions(name, party.state.code)));
+    }
+    await party.waitForNextPatch();
+    const all = [leader, ...others];
+    assert.deepStrictEqual(all.map((c) => party.state.members.get(c.sessionId).team), [0, 1, 0, 1], "alternate on join");
+
+    // Only the leader may move people.
+    const refused = nextMessage<{ reason: string }>(others[0], "refused");
+    others[0].send("set_team", { sessionId: leader.sessionId, team: 1 });
+    assert.match((await refused).reason, /leader/i);
+
+    // Leader wants Zain + Bilal against Ali + Sara: move Sara to team 1 and Bilal to team 0.
+    leader.send("set_team", { sessionId: others[1].sessionId, team: 1 });
+    await party.waitForMessage("set_team");
+    leader.send("set_team", { sessionId: others[2].sessionId, team: 0 });
+    await party.waitForMessage("set_team");
+    leader.send("set_game", { game: "courtpiece" });
+    await party.waitForMessage("set_game");
+    for (const c of all) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 4; i++) await party.waitForMessage("set_ready");
+    await party.waitForNextPatch();
+
+    // Lopsided (three on one side) is refused.
+    leader.send("set_team", { sessionId: others[0].sessionId, team: 0 });
+    await party.waitForMessage("set_team");
+    const lopsided = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("launch", {});
+    assert.match((await lopsided).reason, /two against two/i);
+    leader.send("set_team", { sessionId: others[0].sessionId, team: 1 });
+    await party.waitForMessage("set_team");
+    await party.waitForNextPatch();
+    assert.strictEqual(toPartySnapshot(leader.state).canLaunch, true);
+
+    const seats = all.map((c) => nextMessage<any>(c, "table_ready"));
+    leader.send("launch", {});
+    const reservations = await Promise.all(seats);
+    // Consume in scrambled order: seats must still follow the teams, not arrival.
+    const scrambled = [3, 1, 0, 2];
+    const tables: any[] = new Array(4);
+    for (const i of scrambled) tables[i] = await colyseus.sdk.consumeSeatReservation<CourtPieceState>(reservations[i]);
+    const table = colyseus.getRoomById<CourtPieceState>(reservations[0].roomId);
+    await waitFor(() => table.state.phase === "playing", 3000, "deal start");
+    await table.waitForNextPatch();
+
+    const snap = toCourtPieceSnapshot(tables[0].state);
+    const bySeat = snap.seats.map((s) => s.name);
+    assert.deepStrictEqual(bySeat, ["Zain", "Ali", "Bilal", "Sara"], "team 0 at seats 0 and 2, team 1 at 1 and 3");
+    assert.deepStrictEqual(snap.seats.map((s) => s.team), [0, 1, 0, 1]);
+  });
+
   it("a party of four can launch Court Piece as a best-of-three series", async () => {
     const party = await colyseus.createRoom<PartyState>("party", {});
     const leader = await colyseus.connectTo(party, { name: "Zain" });
@@ -402,7 +457,7 @@ describe("CourtPieceRoom (a live game)", () => {
     assert.strictEqual(table.state.variant, "double_siri");
     assert.strictEqual(table.state.bestOf, 3, "a party launch may set the series length");
     const snap = toCourtPieceSnapshot(tables[0].state);
-    assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Ali", "Sara", "Bilal"]);
+    assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Ali", "Sara", "Bilal"], "default alternating teams: partners opposite");
     assert.strictEqual((await fetchHand(tables[3])).length, 13);
   });
 });

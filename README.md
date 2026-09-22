@@ -57,13 +57,15 @@ use the tunnel command.
 4. For a second player, press `w` in the mobile terminal to open the app in
    a browser tab, go to Play, type the code, and tap **Join party**.
 5. Both tap **Ready**. The leader (★) taps **Launch**. Everyone lands at the
-   same Five Row table with seven private cards.
+   same Five Row table with seven private cards. With four friends the
+   leader can pick **Court Piece** instead, choose Single or Double Siri and
+   best of 1, 3 or 5, and tap the A/B badges to set the teams.
 6. On your turn, pick a card, then tap a highlighted space. A two-eyed Jack
    goes anywhere open; a one-eyed Jack removes an opponent's chip. A dead
    card (both spaces taken) can be swapped once per turn. Thirty seconds per
    turn; if you run out, the server plays a random legal card for you.
 
-**Quick play: 1 vs 1** skips the party and seats you at any open 1v1 table.
+**Quick play** skips the party: Five Row 1 vs 1, or Court Piece Single Siri with three strangers.
 
 Low on disk space? Use slim setup: it skips VS Code and clears the npm cache.
 

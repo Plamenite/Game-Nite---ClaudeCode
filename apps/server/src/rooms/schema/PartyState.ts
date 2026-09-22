@@ -4,6 +4,8 @@ import { schema, t, type SchemaType } from "@colyseus/schema";
 export const PartyMember = schema({
   name: t.string().default("Guest"),
   ready: t.boolean().default(false),
+  /** 0 or 1. Alternates on join; the leader can change it. */
+  team: t.uint8().default(0),
 });
 export type PartyMember = SchemaType<typeof PartyMember>;
 
