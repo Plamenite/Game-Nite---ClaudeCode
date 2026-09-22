@@ -5,17 +5,21 @@ import { cardId, type Card, type Suit } from '../src/cards.js';
 import {
   IllegalPlayError,
   createCourtPieceMatch,
+  isOpeningPlay,
   legalPlaysFor,
   playCard,
   viewForSeat,
   type CourtPieceMatch,
 } from '../src/court-piece-match.js';
+import { createSeries, recordDeal, rematch } from '../src/court-piece-series.js';
 import { legalPlays, trickWinner } from '../src/court-piece-rules.js';
 import {
   COURT_PIECE_PRIVATE_BEST_OF,
   COURT_PIECE_PUBLIC_BEST_OF,
   COURT_PIECE_VARIANTS,
+  OPENING_CARD,
   classifyDeal,
+  dealsNeededToWin,
   nextSeat,
   partnerOf,
   rankValue,
@@ -77,18 +81,25 @@ test('trick winner: highest of led suit, unless trumped; highest trump wins', ()
 
 // ---------------------------------------------------------------- deal
 
-test('everyone gets thirteen cards, nobody calls trump, the dealer\'s right leads', () => {
+test('everyone gets thirteen cards, nobody calls trump, and the two of clubs opens', () => {
   const match = createCourtPieceMatch(2, { variant: 'single_siri' }, fixedRandom);
-  assert.equal(match.leader, 3, 'player to the dealer\'s right');
-  assert.equal(match.current, 3);
   assert.equal(match.phase, 'playing');
   assert.equal(match.trump, null);
   assert.equal(match.trumpSetter, null);
   assert.deepEqual(match.hands.map((h) => h.length), [13, 13, 13, 13]);
   const all = new Set(match.hands.flat().map(cardId));
   assert.equal(all.size, 52, 'every card dealt exactly once');
-  assert.deepEqual(legalPlaysFor(match, 0), [], 'not the leader');
-  assert.equal(legalPlaysFor(match, 3).length, 13, 'the leader may play anything');
+
+  const holder = match.hands.findIndex((h) => h.some((x) => cardId(x) === cardId(OPENING_CARD)));
+  assert.equal(match.leader, holder, 'whoever holds the two of clubs leads');
+  assert.equal(match.current, holder);
+  assert.ok(isOpeningPlay(match));
+  assert.deepEqual(legalPlaysFor(match, holder).map(cardId), ['2-clubs'], 'and must open with it');
+  assert.deepEqual(legalPlaysFor(match, nextSeat(holder)), [], 'not the leader');
+
+  const opened = playCard(match, holder, OPENING_CARD).match;
+  assert.equal(isOpeningPlay(opened), false);
+  assert.equal(legalPlaysFor(opened, nextSeat(holder)).length > 0, true);
 
   const view = viewForSeat(match, 0);
   assert.equal(view.hand.length, 13);
@@ -105,7 +116,8 @@ function rigged(
   trumpSetter: number | null = null,
 ): CourtPieceMatch {
   const base = createCourtPieceMatch(3, { variant }, fixedRandom);
-  return { ...base, hands: hands.map((h) => h.slice()), trump, trumpSetter, lastTrickAfterTrump: trump !== null, leader: 0, current: 0 };
+  // Scripted deals skip the two-of-clubs opening rule.
+  return { ...base, hands: hands.map((h) => h.slice()), trump, trumpSetter, lastTrickAfterTrump: trump !== null, leader: 0, current: 0, opened: true };
 }
 
 /** Play one full trick: each seat in turn plays the given card, starting from whoever leads. */
@@ -320,4 +332,59 @@ test('double siri: two consecutive tricks both won with an ace do not bank', () 
   match = r.match;
   assert.deepEqual(r.result.collectedBy, { team: 0, count: 4 }, 'a non-ace win after an ace win banks');
   assert.deepEqual(match.collected, [4, 0]);
+});
+
+// ---------------------------------------------------------------- series
+
+test('series: best of 1, 3 or 5; a kot is one win; the dealer rotates; rematch resets', () => {
+  assert.equal(dealsNeededToWin(1), 1);
+  assert.equal(dealsNeededToWin(3), 2);
+  assert.equal(dealsNeededToWin(5), 3);
+
+  let series = createSeries(3, 0);
+  series = recordDeal(series, { winner: 1, result: 'kot', collected: [0, 13] });
+  assert.deepEqual(series.score, [0, 1], 'a kot counts once');
+  assert.equal(series.nextDealer, 1, 'one seat to the right');
+  assert.equal(series.winner, null);
+  series = recordDeal(series, { winner: 0, result: 'win', collected: [8, 5] });
+  series = recordDeal(series, { winner: 0, result: 'goon_kot', collected: [13, 0] });
+  assert.equal(series.winner, 0);
+  assert.equal(series.deals.length, 3);
+  assert.throws(() => recordDeal(series, { winner: 1, result: 'win', collected: [6, 7] }), /already decided/);
+
+  const again = rematch(series);
+  assert.deepEqual(again.score, [0, 0]);
+  assert.equal(again.deals.length, 0);
+  assert.equal(again.nextDealer, series.nextDealer, 'seats and rotation carry on');
+});
+
+test('single siri: tricks wait for the trump; the trick that creates it takes the pile, then every trick banks', () => {
+  const hands: Card[][] = [
+    [c('A', 'hearts'), c('K', 'hearts'), c('2', 'clubs'), c('3', 'diamonds')],
+    [c('2', 'hearts'), c('3', 'hearts'), c('A', 'diamonds'), c('K', 'diamonds')],
+    [c('5', 'hearts'), c('6', 'hearts'), c('3', 'clubs'), c('4', 'diamonds')],
+    [c('8', 'hearts'), c('9', 'hearts'), c('4', 'clubs'), c('5', 'diamonds')],
+  ];
+  let match = rigged('single_siri', hands);
+
+  let r = playTrick(match, [c('A', 'hearts'), c('2', 'hearts'), c('5', 'hearts'), c('8', 'hearts')]);
+  match = r.match;
+  assert.equal(r.result.collectedBy, undefined, 'no trump yet: waits');
+  r = playTrick(match, [c('K', 'hearts'), c('3', 'hearts'), c('6', 'hearts'), c('9', 'hearts')]);
+  match = r.match;
+  assert.equal(match.heap, 2);
+  assert.deepEqual(match.collected, [0, 0]);
+
+  // Seat 0 leads a club; seat 1 cuts with a diamond and wins: takes the pile of 3.
+  r = playTrick(match, [c('2', 'clubs'), c('A', 'diamonds'), c('3', 'clubs'), c('4', 'clubs')]);
+  match = r.match;
+  assert.equal(match.trump, 'diamonds');
+  assert.deepEqual(r.result.collectedBy, { team: 1, count: 3 });
+  assert.deepEqual(match.collected, [0, 3]);
+
+  // From now on every trick banks immediately.
+  r = playTrick(match, [c('K', 'diamonds'), c('4', 'diamonds'), c('5', 'diamonds'), c('3', 'diamonds')]);
+  match = r.match;
+  assert.deepEqual(r.result.collectedBy, { team: 1, count: 1 });
+  assert.deepEqual(match.collected, [0, 4]);
 });

@@ -1,17 +1,22 @@
 import { Room, Client, CloseCode, ServerError, matchMaker } from "colyseus";
 import {
+  COURT_PIECE_PRIVATE_BEST_OF,
+  COURT_PIECE_VARIANTS,
   PARTY_EVENTS,
+  PARTY_GAMES,
   PARTY_JOIN_FILTER_KEY,
   PARTY_MESSAGES,
   ROOMS,
   SKELETON_PARTY_SIZE,
   canLaunchParty,
   fiverowConfigForPlayers,
+  type PartyGameChoice,
   generatePartyCode,
   normalizePartyCode,
   sanitizeDisplayName,
 } from "@gamenite/game-rules";
 import { authenticate } from "../auth.js";
+import { LAUNCH_SECRET } from "../launch.js";
 import { PartyMember, PartyState } from "./schema/PartyState.js";
 
 /** What the phone sends when creating or joining a party (see partyJoinOptions). */
@@ -41,6 +46,21 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
       const member = this.state.members.get(client.sessionId);
       if (!member) { return; }
       member.ready = Boolean(message?.ready);
+    },
+
+    [PARTY_MESSAGES.setGame]: (client: Client, choice: PartyGameChoice | undefined) => {
+      if (client.sessionId !== this.state.leaderSessionId) return this.refuse(client, "Only the party leader picks the game.");
+      if (this.state.status !== "open") return;
+      if (!choice || !PARTY_GAMES.includes(choice.game)) return this.refuse(client, "Unknown game.");
+      this.state.game = choice.game;
+      if (choice.variant !== undefined) {
+        if (!COURT_PIECE_VARIANTS.some((v) => v.id === choice.variant)) return this.refuse(client, "Unknown variant.");
+        this.state.variant = choice.variant;
+      }
+      if (choice.bestOf !== undefined) {
+        if (!(COURT_PIECE_PRIVATE_BEST_OF as readonly number[]).includes(Number(choice.bestOf))) return this.refuse(client, "Best of 1, 3 or 5 only.");
+        this.state.bestOf = Number(choice.bestOf);
+      }
     },
 
     [PARTY_MESSAGES.launch]: async (client: Client) => {
@@ -101,19 +121,27 @@ export class PartyRoom extends Room<{ state: PartyState; metadata: { code: strin
     }
 
     const members = [...this.state.members.values()];
-    if (!canLaunchParty(members, this.state.status)) {
-      return this.refuse(leader, "Everyone must be ready first.");
-    }
-
-    // For now every party plays Five Row; a game picker comes with Court Piece.
-    const config = fiverowConfigForPlayers(members.length);
-    if (!config) {
-      return this.refuse(leader, "Five Row needs 2, 3 or 4 players.");
+    if (!canLaunchParty(members, this.state.status, this.state.game)) {
+      return this.refuse(leader, this.state.game === "courtpiece" ? "Court Piece needs exactly 4 ready players." : "Everyone must be ready first.");
     }
 
     this.state.status = "launching";
     try {
-      const table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players });
+      let table;
+      if (this.state.game === "courtpiece") {
+        table = await matchMaker.createRoom(ROOMS.courtpiece, {
+          variant: this.state.variant,
+          bestOf: this.state.bestOf,
+          launchSecret: LAUNCH_SECRET,
+        });
+      } else {
+        const config = fiverowConfigForPlayers(members.length);
+        if (!config) {
+          this.state.status = "open";
+          return this.refuse(leader, "Five Row needs 2, 3 or 4 players.");
+        }
+        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players });
+      }
 
       // Reserve one seat per member and hand each phone its own reservation.
       for (const client of this.clients) {

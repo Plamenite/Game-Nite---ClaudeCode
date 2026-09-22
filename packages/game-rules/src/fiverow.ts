@@ -7,6 +7,7 @@
  * internal id is `fiverow`; the player-facing name lives in games.ts.
  */
 import type { Card } from './cards.js';
+import { ABANDONED_MOVE_DELAY_MS, TIMEOUTS_TO_ABANDON, TURN_SECONDS } from './table-policy.js';
 
 export const FIVEROW_BOARD_SIZE = 10;
 
@@ -93,16 +94,7 @@ export function fiverowConfigForPlayers(playerCount: number): FiveRowTableConfig
   return FIVEROW_TABLE_CONFIGS.find((c) => c.players === playerCount) ?? null;
 }
 
-/** Seconds a player gets per turn. DECIDED by the founder 2026-09-22. */
-export const FIVEROW_TURN_SECONDS = 30;
-
-/**
- * When the timer runs out the server plays a random legal card for the
- * player. After this many timeouts IN A ROW the seat counts as abandoned:
- * it is auto-played instantly from then on, and if only one team still has
- * a present player, that team wins.
- */
-export const FIVEROW_TIMEOUTS_TO_ABANDON = 3;
-
-/** Small pause before an abandoned seat's automatic move, so others can follow. */
-export const FIVEROW_ABANDONED_MOVE_DELAY_MS = 700;
+/** Shared table policy; kept under these names for the Five Row room. */
+export const FIVEROW_TURN_SECONDS = TURN_SECONDS;
+export const FIVEROW_TIMEOUTS_TO_ABANDON = TIMEOUTS_TO_ABANDON;
+export const FIVEROW_ABANDONED_MOVE_DELAY_MS = ABANDONED_MOVE_DELAY_MS;

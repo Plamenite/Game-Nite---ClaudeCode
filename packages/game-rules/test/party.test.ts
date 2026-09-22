@@ -41,10 +41,20 @@ test('toPartySnapshot marks the leader and computes canLaunch', () => {
     ['L', { name: 'Zain', ready: true }],
     ['M', { name: 'Friend', ready: true }],
   ]);
-  const snap = toPartySnapshot({ code: 'K7PM3X', leaderSessionId: 'L', status: 'open', members });
+  const snap = toPartySnapshot({ code: 'K7PM3X', leaderSessionId: 'L', status: 'open', game: 'fiverow', variant: 'single_siri', bestOf: 1, members });
   assert.deepEqual(snap.members, [
     { sessionId: 'L', name: 'Zain', ready: true, isLeader: true },
     { sessionId: 'M', name: 'Friend', ready: true, isLeader: false },
   ]);
   assert.equal(snap.canLaunch, true);
+});
+
+test('a party must have exactly four members to launch Court Piece', async () => {
+  const { canLaunchParty, partySizeAllowed } = await import('../src/party.js');
+  assert.equal(partySizeAllowed('courtpiece', 3), false);
+  assert.equal(partySizeAllowed('courtpiece', 4), true);
+  assert.equal(partySizeAllowed('fiverow', 5), false);
+  const three = [{ ready: true }, { ready: true }, { ready: true }];
+  assert.equal(canLaunchParty(three, 'open', 'courtpiece'), false);
+  assert.equal(canLaunchParty(three, 'open', 'fiverow'), true);
 });

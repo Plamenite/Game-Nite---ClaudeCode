@@ -21,6 +21,17 @@ export function cardId(card: Card): string {
   return `${card.rank}-${card.suit}`;
 }
 
+/** The inverse of cardId. Throws on anything that is not a real card. */
+export function parseCardId(id: string): Card {
+  const dash = id.lastIndexOf('-');
+  const rank = id.slice(0, dash) as Rank;
+  const suit = id.slice(dash + 1) as Suit;
+  if (!RANKS.includes(rank) || !SUITS.includes(suit)) {
+    throw new RangeError(`not a card id: ${id}`);
+  }
+  return { rank, suit };
+}
+
 /** One standard 52-card deck, no jokers, in a fixed order (unshuffled). */
 export function createStandardDeck(): Card[] {
   const deck: Card[] = [];

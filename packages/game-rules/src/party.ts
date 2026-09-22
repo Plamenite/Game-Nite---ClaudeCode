@@ -9,9 +9,22 @@ import type { RandomSource } from './cards.js';
 export const PARTY_MESSAGES = {
   /** payload: { ready: boolean } */
   setReady: 'set_ready',
+  /** payload: PartyGameChoice. Only the leader may send it. */
+  setGame: 'set_game',
   /** payload: none. Only the leader may send it. */
   launch: 'launch',
 } as const;
+
+/** What the leader can choose for the party's next game. */
+export interface PartyGameChoice {
+  game: 'fiverow' | 'courtpiece';
+  /** Court Piece only. */
+  variant?: 'single_siri' | 'double_siri';
+  /** Court Piece only; private tables may pick 1, 3 or 5. */
+  bestOf?: 1 | 3 | 5;
+}
+
+export const PARTY_GAMES: readonly PartyGameChoice['game'][] = ['fiverow', 'courtpiece'];
 
 /** Messages the party room sends to phones. */
 export const PARTY_EVENTS = {
@@ -84,6 +97,9 @@ export interface PartySnapshot {
   code: string;
   leaderSessionId: string;
   status: PartyStatus;
+  game: PartyGameChoice['game'];
+  variant: NonNullable<PartyGameChoice['variant']>;
+  bestOf: NonNullable<PartyGameChoice['bestOf']>;
   members: PartyMemberSnapshot[];
   /** True when the leader is allowed to launch right now. */
   canLaunch: boolean;
@@ -94,21 +110,26 @@ export interface PartyStateLike {
   code: string;
   leaderSessionId: string;
   status: string;
+  game: string;
+  variant: string;
+  bestOf: number;
   members: {
     forEach(cb: (member: { name: string; ready: boolean }, sessionId: string) => void): void;
   };
 }
 
-/** Minimum members before a launch is allowed. Matches the skeleton table. */
+/** Minimum members before a launch is allowed. */
 export const MIN_PARTY_MEMBERS_TO_LAUNCH = 2;
 
+/** How many players each game needs at the table. */
+export function partySizeAllowed(game: string, members: number): boolean {
+  if (game === 'courtpiece') return members === 4;
+  return members >= MIN_PARTY_MEMBERS_TO_LAUNCH && members <= 4;
+}
+
 /** The one rule for launching, shared so the app can grey out the button honestly. */
-export function canLaunchParty(members: readonly { ready: boolean }[], status: string): boolean {
-  return (
-    status === 'open' &&
-    members.length >= MIN_PARTY_MEMBERS_TO_LAUNCH &&
-    members.every((m) => m.ready)
-  );
+export function canLaunchParty(members: readonly { ready: boolean }[], status: string, game = 'fiverow'): boolean {
+  return status === 'open' && partySizeAllowed(game, members.length) && members.every((m) => m.ready);
 }
 
 export function toPartySnapshot(state: PartyStateLike): PartySnapshot {
@@ -125,7 +146,10 @@ export function toPartySnapshot(state: PartyStateLike): PartySnapshot {
     code: state.code,
     leaderSessionId: state.leaderSessionId,
     status: state.status as PartyStatus,
+    game: state.game as PartyGameChoice['game'],
+    variant: state.variant as NonNullable<PartyGameChoice['variant']>,
+    bestOf: state.bestOf as NonNullable<PartyGameChoice['bestOf']>,
     members,
-    canLaunch: canLaunchParty(members, state.status),
+    canLaunch: canLaunchParty(members, state.status, state.game),
   };
 }

@@ -32,8 +32,7 @@ iOS-first mobile multiplayer board/card game platform.
 - Position and document the product as a **casual social game**, not
   gambling. Never use casino/gambling language in code, UI, or store copy.
 - Virtual currency can never be cashed out, transferred for value, or
-  exchanged for money or prizes. Design every economy feature for this.
-- Ads and IAP must follow Apple guidelines (StoreKit, ATT prompt, etc.).
+  exchanged for money or prizes. Ads and IAP follow Apple rules (StoreKit, ATT).
 
 ## 4. iOS-first engineering rule (strict)
 - ALL code must be written and optimized for iOS deployment first:
@@ -70,28 +69,29 @@ iOS-first mobile multiplayer board/card game platform.
 - `apps/mobile/expo-env.d.ts` is committed so `tsc` works on a fresh clone.
 - Root: `npm run mobile|server|test|typecheck`; CI runs the last two on
   every push. Windows setup: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
-- Five Row is LIVE end to end: pure engine `game-rules/src/fiverow-*.ts`
-  (own board layout, never regenerate casually), `FiveRowRoom` (hands sent
-  privately, crypto RNG, 30 s turns (DECIDED), timeout → random legal
-  move, 3 in a row → seat abandoned, last team present wins), phone board
-  `components/fiverow-board.tsx`. DECIDED: tables 1v1, 3p, 2v2; standard
-  hand sizes and runs-to-win.
-- Court Piece engine `game-rules/src/court-piece-*.ts`. FOUNDER'S RULES:
-  nobody calls trump; the first card played off-suit sets it and that team
-  "called" it; every deal runs all 13 tricks; 7 = win, 13 by the calling
-  team = kot, 13 by the other = goon kot; private tables best of 1/3/5,
-  public 1 deal + rematch. Double siri: same player two in a row banks the
-  pile, never after tricks 1/2/12, only once trump exists, not when both
-  wins were with aces; 13th takes the rest. PENDING: single siri pre-trump
-  banking, kot value in a series, who leads the next deal, rematch flow.
-- Skeleton (done, pre-login): `PartyRoom` (create/join by code, Ready,
-  leader-only launch → seat reservations in a `FiveRowRoom`). App: Play tab
-  (`use-party`/`use-fiverow`), TEMPORARY guest token `src/lib/guest.ts`.
-  Server verifies Supabase JWTs (`src/auth.ts`; guests only if
-  ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
-- Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches
-  `metadata.code` (plain keys, no dots). Room tests share ONE booted test
-  server (`test/rooms.test.ts`); two boots per process break matchmaking.
+- Five Row LIVE end to end: engine `game-rules/src/fiverow-*.ts` (own board
+  layout, never regenerate), `FiveRowRoom` (private hands, crypto RNG, 30 s
+  turns, timeout → random legal move, 3 in a row → abandoned, last team
+  present wins), board `components/fiverow-board.tsx`. DECIDED: 1v1, 3p,
+  2v2; standard hand sizes and runs-to-win.
+- Court Piece (ALL RULES DECIDED): engine `game-rules/src/court-piece-*.ts`,
+  `CourtPieceRoom` live (private hands, 30 s auto-play, forfeit when a whole
+  team abandons, series + rematch); phone screen NOT built yet. Rules: 2♣
+  holder opens with 2♣; nobody calls trump, the first off-suit card sets it
+  and that team "called" it; all 13 tricks played; 7 = win, 13 by callers =
+  kot, by others = goon kot (each one series win). Single siri: tricks wait
+  until trump, the trump-making trick takes the pile, then each banks.
+  Double siri: same player two in a row banks, never after tricks 1/2/12,
+  only once trump exists, not two ace wins; 13th takes the rest. Private
+  best of 1/3/5 (dealer rotates right), public best of 1 + rematch (all 4
+  agree). Party leader picks game/variant/best-of; launches use a
+  server-only LAUNCH_SECRET so phones cannot request a series.
+- Skeleton (done, pre-login): `PartyRoom` (code join, Ready, leader launch
+  → seat reservations). App: Play tab (`use-party`/`use-fiverow`), TEMPORARY
+  guest token `src/lib/guest.ts`. Server verifies Supabase JWTs (`src/auth.ts`;
+  guests only if ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
+- Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`
+  (plain keys). Room tests share ONE booted test server; two boots break it.
 
 ## 7. Project conventions
 - Founder: Windows PC (58 GB free, normal setup) daily; MacBook Air for Xcode.

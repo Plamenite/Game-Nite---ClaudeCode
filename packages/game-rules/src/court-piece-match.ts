@@ -11,6 +11,7 @@ import {
   COURT_PIECE_HAND_SIZE,
   COURT_PIECE_TOTAL_TRICKS,
   COURT_PIECE_TRICKS_TO_WIN,
+  OPENING_CARD,
   classifyDeal,
   isAce,
   nextSeat,
@@ -37,7 +38,7 @@ export interface CompletedTrick {
 export interface CourtPieceMatch {
   settings: Required<CourtPieceSettings>;
   dealer: number;
-  /** Player to the dealer's right: leads the first trick. */
+  /** Whoever was dealt the two of clubs: leads the first trick with it. */
   leader: number;
   phase: CourtPiecePhase;
   hands: Card[][];
@@ -47,6 +48,8 @@ export interface CourtPieceMatch {
   trumpSetter: number | null;
   /** Seat whose turn it is. */
   current: number;
+  /** False until the two of clubs has been played to open the deal. */
+  opened: boolean;
   /** Cards on the table for the trick in progress. */
   trick: TrickCard[];
   completed: CompletedTrick[];
@@ -70,16 +73,16 @@ export class IllegalPlayError extends Error {}
 
 const CARDS_PER_TRICK = 4;
 
-/** Shuffle and deal all 13 cards each, starting with the leader. No trump yet. */
+/** Shuffle and deal all 13 cards each. The two of clubs decides who leads. No trump yet. */
 export function createCourtPieceMatch(dealer: number, settings: CourtPieceSettings, random: RandomSource): CourtPieceMatch {
   const deck = shuffle(createStandardDeck(), random);
-  const leader = nextSeat(dealer);
   const hands: Card[][] = [[], [], [], []];
-  let seat = leader;
+  let seat = nextSeat(dealer);
   for (let i = 0; i < 4; i++) {
     hands[seat] = deck.splice(0, COURT_PIECE_HAND_SIZE);
     seat = nextSeat(seat);
   }
+  const leader = hands.findIndex((h) => h.some((c) => cardId(c) === cardId(OPENING_CARD)));
 
   return {
     settings: { variant: settings.variant, tricksToWin: settings.tricksToWin ?? COURT_PIECE_TRICKS_TO_WIN },
@@ -90,6 +93,7 @@ export function createCourtPieceMatch(dealer: number, settings: CourtPieceSettin
     trump: null,
     trumpSetter: null,
     current: leader,
+    opened: false,
     trick: [],
     completed: [],
     collected: [0, 0],
@@ -117,9 +121,18 @@ export function ledSuit(match: CourtPieceMatch): Suit | null {
   return match.trick.length > 0 ? match.trick[0].card.suit : null;
 }
 
+/** True before any card has been played in this deal. */
+export function isOpeningPlay(match: CourtPieceMatch): boolean {
+  return !match.opened;
+}
+
 /** Cards this seat may play right now (empty when it is not their turn). */
 export function legalPlaysFor(match: CourtPieceMatch, seat: number): Card[] {
   if (match.phase !== 'playing' || match.current !== seat) return [];
+  if (isOpeningPlay(match)) {
+    // The deal always opens with the two of clubs.
+    return match.hands[seat].filter((c) => cardId(c) === cardId(OPENING_CARD));
+  }
   return legalPlays(match.hands[seat], ledSuit(match));
 }
 
@@ -141,6 +154,7 @@ export function playCard(match: CourtPieceMatch, seat: number, card: Card): Play
   }
 
   const next = clone(match);
+  next.opened = true;
   next.hands[seat].splice(index, 1);
   next.trick.push({ seat, card });
   const result: PlayResult = { match: next };
@@ -187,31 +201,31 @@ export function playCard(match: CourtPieceMatch, seat: number, card: Card): Play
 }
 
 /**
- * Who gets the trick just won, per variant.
+ * Who gets the trick just won, per variant (FOUNDER, 2026-09-22).
  *
- * single_siri: straight to the winner's team, every trick.
- *   CONFIRM: tricks won before the trump exists bank immediately too.
+ * single_siri: tricks pile up until the trump exists. The trick in which
+ * the trump is created takes the whole pile; every trick after that banks
+ * straight away.
  *
- * double_siri (FOUNDER, 2026-09-22): tricks pile in the middle. The same
- * PLAYER winning two tricks in a row banks the pile, provided that:
+ * double_siri: tricks pile in the middle. The same PLAYER winning two
+ * tricks in a row banks the pile, provided that:
  *   - it is not the 1st, 2nd or 12th trick (documented rule),
- *   - BOTH tricks were won after the trump was created (blind-trump caveat),
+ *   - BOTH tricks were won after the trump was created,
  *   - the two tricks were not both won with an ace (ace-after-ace rule).
- * Whoever wins the 13th trick takes whatever is left, no conditions.
+ *
+ * Both: whoever wins the 13th trick takes whatever is left, no conditions.
  */
 function collectTricks(match: CourtPieceMatch, trick: CompletedTrick): { team: number; count: number } | null {
   const team = seatTeam(trick.winner);
-
-  if (match.settings.variant !== 'double_siri') {
-    match.collected[team] += 1;
-    return { team, count: 1 };
-  }
-
   match.heap += 1;
   const n = trick.number;
   if (n === COURT_PIECE_TOTAL_TRICKS) return bankHeap(match, team);
-  if (n < 3 || n > 11) return null;
 
+  if (match.settings.variant === 'single_siri') {
+    return match.trump === null ? null : bankHeap(match, team);
+  }
+
+  if (n < 3 || n > 11) return null;
   const sameWinnerTwice = match.lastTrickWinner === trick.winner;
   const bothAfterTrump = match.trump !== null && match.lastTrickAfterTrump;
   const winningCard = trick.plays.find((p) => p.seat === trick.winner)!.card;

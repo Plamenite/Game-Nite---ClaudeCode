@@ -5,6 +5,7 @@
 export const ROOMS = {
   party: 'party',
   fiverow: 'fiverow',
+  courtpiece: 'courtpiece',
 } as const;
 
 /** Keep display names short and printable. Empty input becomes "Guest". */

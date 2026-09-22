@@ -8,5 +8,8 @@ export * from './fiverow-table.js';
 export * from './court-piece.js';
 export * from './court-piece-rules.js';
 export * from './court-piece-match.js';
+export * from './court-piece-series.js';
+export * from './court-piece-table.js';
 export * from './table.js';
+export * from './table-policy.js';
 export * from './party.js';

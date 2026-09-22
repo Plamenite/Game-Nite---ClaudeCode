@@ -2,9 +2,13 @@ import assert from "assert";
 import { ColyseusTestServer, boot } from "@colyseus/testing";
 import {
   NO_CHIP,
+  OPENING_CARD,
   boardFromSnapshot,
+  cardId,
+  legalPlays,
   movesForCard,
   partyJoinOptions,
+  toCourtPieceSnapshot,
   toFiveRowSnapshot,
   toPartySnapshot,
   type Card,
@@ -13,6 +17,7 @@ import {
 
 import appConfig from "../src/app.config.js";
 import { configureAuth } from "../src/auth.js";
+import { CourtPieceState } from "../src/rooms/schema/CourtPieceState.js";
 import { FiveRowState } from "../src/rooms/schema/FiveRowState.js";
 import { PartyState } from "../src/rooms/schema/PartyState.js";
 
@@ -249,5 +254,155 @@ describe("PartyRoom (walking skeleton)", () => {
     assert.ok(view.turnSessionId, "the first turn has started");
     assert.deepStrictEqual(toFiveRowSnapshot(tableB.state).seats, view.seats);
     assert.strictEqual((await fetchHand(tableA)).length, 7);
+  });
+});
+
+describe("CourtPieceRoom (a live game)", () => {
+  /** Seat four guests and return their SDK rooms in seat order, plus their private hands. */
+  async function seatFour(room: any) {
+    const clients = [];
+    const hands: Card[][] = [];
+    for (const name of ["Zain", "Ali", "Sara", "Bilal"]) {
+      clients.push(await colyseus.connectTo(room, { name }));
+    }
+    await waitFor(() => room.state.phase === "playing", 3000, "deal start");
+    await room.waitForNextPatch();
+    for (const c of clients) hands.push(await fetchHand(c));
+    return { clients, hands };
+  }
+
+  /** What the phone considers legal: the two of clubs first, then follow suit. */
+  function legalFor(snapshot: ReturnType<typeof toCourtPieceSnapshot>, hand: Card[]): Card[] {
+    if (snapshot.tricksPlayed === 0 && snapshot.trick.length === 0) {
+      return hand.filter((c) => cardId(c) === cardId(OPENING_CARD));
+    }
+    const led = snapshot.trick.length > 0 ? snapshot.trick[0].card.suit : null;
+    return legalPlays(hand, led);
+  }
+
+  it("seats four, deals thirteen private cards each, and the two of clubs must open", async () => {
+    const room = await colyseus.createRoom<CourtPieceState>("courtpiece", { variant: "double_siri", bestOf: 5 });
+    assert.strictEqual(room.state.bestOf, 1, "quick play cannot request a series");
+    assert.strictEqual(room.state.variant, "double_siri");
+
+    const { clients, hands } = await seatFour(room);
+    const snap = toCourtPieceSnapshot(clients[0].state);
+    assert.deepStrictEqual(snap.seats.map((s) => [s.name, s.seat, s.team]), [["Zain", 0, 0], ["Ali", 1, 1], ["Sara", 2, 0], ["Bilal", 3, 1]]);
+    assert.ok(hands.every((h) => h.length === 13));
+    assert.strictEqual(snap.trump, null);
+    assert.strictEqual(snap.dealNumber, 1);
+
+    const holder = hands.findIndex((h) => h.some((c) => cardId(c) === cardId(OPENING_CARD)));
+    assert.strictEqual(snap.currentSeat, holder, "the two of clubs holder starts");
+    assert.strictEqual(snap.turnSessionId, clients[holder].sessionId);
+
+    // Any other card from the holder is refused; the two of clubs is accepted.
+    const other = hands[holder].find((c) => cardId(c) !== cardId(OPENING_CARD))!;
+    const refused = nextMessage<{ reason: string }>(clients[holder], "refused");
+    clients[holder].send("play", { card: other });
+    assert.match((await refused).reason, /cannot be played/i);
+
+    clients[holder].send("play", { card: OPENING_CARD });
+    await room.waitForMessage("play");
+    await room.waitForNextPatch();
+    const after = toCourtPieceSnapshot(clients[1].state);
+    assert.strictEqual(after.trick.length, 1);
+    assert.strictEqual(cardId(after.trick[0].card), "2-clubs");
+    assert.strictEqual(after.currentSeat, (holder + 1) % 4);
+    assert.strictEqual(after.seats[holder].handCount, 12);
+  });
+
+  it("four phones play a whole deal; every trick ends up banked and the result is classified", async () => {
+    const room = await colyseus.createRoom<CourtPieceState>("courtpiece", { variant: "single_siri" });
+    const { clients, hands } = await seatFour(room);
+
+    let plays = 0;
+    while (room.state.phase === "playing" && plays < 60) {
+      const seat = room.state.currentSeat;
+      const snap = toCourtPieceSnapshot(clients[seat].state);
+      const legal = legalFor(snap, hands[seat]);
+      assert.ok(legal.length > 0, `seat ${seat} must have a legal card`);
+      const card = legal[0];
+      clients[seat].send("play", { card });
+      await room.waitForMessage("play");
+      await room.waitForNextPatch();
+      hands[seat] = hands[seat].filter((c) => cardId(c) !== cardId(card));
+      plays++;
+    }
+    assert.strictEqual(plays, 52, "thirteen tricks of four cards");
+    const snap = toCourtPieceSnapshot(clients[0].state);
+    assert.strictEqual(snap.phase, "finished", "best of one: the match ends with the deal");
+    assert.strictEqual(snap.collected[0] + snap.collected[1], 13, "every trick banked");
+    assert.ok(["win", "kot", "goon_kot"].includes(snap.dealResult ?? ""), `result ${snap.dealResult}`);
+    assert.strictEqual(snap.seriesWinner, snap.dealWinner);
+    assert.deepStrictEqual(snap.score, snap.dealWinner === 0 ? [1, 0] : [0, 1]);
+    assert.ok(snap.trump !== null || snap.dealResult === "kot", "a trump was set unless nobody ever cut");
+
+    // Everyone votes for a rematch: a fresh deal starts with the score reset.
+    for (const c of clients) c.send("rematch", {});
+    await waitFor(() => room.state.phase === "playing", 3000, "rematch");
+    await room.waitForNextPatch();
+    const again = toCourtPieceSnapshot(clients[2].state);
+    assert.deepStrictEqual(again.score, [0, 0]);
+    assert.strictEqual(again.dealNumber, 1);
+    assert.strictEqual(again.tricksPlayed, 0);
+    assert.strictEqual((await fetchHand(clients[2])).length, 13);
+  });
+
+  it("slow players are auto-played; when a whole team has abandoned, the other team wins by forfeit", async () => {
+    process.env.COURTPIECE_TURN_SECONDS = "0.2";
+    try {
+      const room = await colyseus.createRoom<CourtPieceState>("courtpiece", { variant: "single_siri" });
+      const { clients } = await seatFour(room);
+      await waitFor(() => room.state.tricksPlayed >= 1, 4000, "an automatic trick");
+      await waitFor(() => room.state.phase === "finished", 8000, "forfeit");
+      const snap = toCourtPieceSnapshot(clients[0].state);
+      assert.strictEqual(snap.dealResult, "forfeit");
+      assert.ok(snap.seriesWinner === 0 || snap.seriesWinner === 1);
+      const losers = snap.seats.filter((s) => s.team !== snap.seriesWinner);
+      assert.ok(losers.every((s) => s.abandoned), "both seats of the losing team abandoned");
+    } finally {
+      delete process.env.COURTPIECE_TURN_SECONDS;
+    }
+  });
+
+  it("a party of four can launch Court Piece as a best-of-three series", async () => {
+    const party = await colyseus.createRoom<PartyState>("party", {});
+    const leader = await colyseus.connectTo(party, { name: "Zain" });
+    const others = [];
+    for (const name of ["Ali", "Sara", "Bilal"]) {
+      others.push(await colyseus.sdk.join<PartyState>("party", partyJoinOptions(name, party.state.code)));
+    }
+    await party.waitForNextPatch();
+
+    // Only the leader may pick the game.
+    const refused = nextMessage<{ reason: string }>(others[0], "refused");
+    others[0].send("set_game", { game: "courtpiece" });
+    assert.match((await refused).reason, /leader/i);
+
+    leader.send("set_game", { game: "courtpiece", variant: "double_siri", bestOf: 3 });
+    await party.waitForMessage("set_game");
+    await party.waitForNextPatch();
+    assert.strictEqual(party.state.game, "courtpiece");
+    assert.strictEqual(toPartySnapshot(leader.state).bestOf, 3);
+
+    for (const c of [leader, ...others]) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 4; i++) await party.waitForMessage("set_ready");
+    await party.waitForNextPatch();
+
+    const seats = [leader, ...others].map((c) => nextMessage<any>(c, "table_ready"));
+    leader.send("launch", {});
+    const reservations = await Promise.all(seats);
+    const tables = [];
+    for (const r of reservations) tables.push(await colyseus.sdk.consumeSeatReservation<CourtPieceState>(r));
+    const table = colyseus.getRoomById<CourtPieceState>(reservations[0].roomId);
+    await waitFor(() => table.state.phase === "playing", 3000, "deal start");
+    await table.waitForNextPatch();
+
+    assert.strictEqual(table.state.variant, "double_siri");
+    assert.strictEqual(table.state.bestOf, 3, "a party launch may set the series length");
+    const snap = toCourtPieceSnapshot(tables[0].state);
+    assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Ali", "Sara", "Bilal"]);
+    assert.strictEqual((await fetchHand(tables[3])).length, 13);
   });
 });

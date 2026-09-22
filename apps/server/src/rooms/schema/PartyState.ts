@@ -21,6 +21,11 @@ export const PartyState = schema({
   /** "open" | "launching" | "launched" */
   status: t.string().default("open"),
 
+  /** The leader's choice for the next game. */
+  game: t.string().default("fiverow"),
+  variant: t.string().default("single_siri"),
+  bestOf: t.uint8().default(1),
+
   members: t.map(PartyMember),
 });
 export type PartyState = SchemaType<typeof PartyState>;

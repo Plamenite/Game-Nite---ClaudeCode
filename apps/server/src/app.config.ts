@@ -14,6 +14,7 @@ import {
 import { GAMES, PARTY_JOIN_FILTER_KEY, ROOMS } from "@gamenite/game-rules";
 import { PartyRoom } from "./rooms/PartyRoom.js";
 import { FiveRowRoom } from "./rooms/FiveRowRoom.js";
+import { CourtPieceRoom } from "./rooms/CourtPieceRoom.js";
 
 const server = defineServer({
 
@@ -23,6 +24,8 @@ const server = defineServer({
   rooms: {
     // Quick play: joinOrCreate with { players: 2 | 3 | 4 } picks the table shape.
     [ROOMS.fiverow]: defineRoom(FiveRowRoom).filterBy(["players"]).enableRealtimeListing(),
+    // Quick play: joinOrCreate with { variant } picks Single or Double Siri.
+    [ROOMS.courtpiece]: defineRoom(CourtPieceRoom).filterBy(["variant"]).enableRealtimeListing(),
     // Friends join with partyJoinOptions(name, code). The matchmaker forwards
     // the "code" option and its driver matches it against the room's
     // metadata.code, which PartyRoom sets in onCreate.

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { ROOMS, sanitizeDisplayName } from '../src/table.js';
 
 test('room names are stable strings', () => {
-  assert.deepEqual(ROOMS, { party: 'party', fiverow: 'fiverow' });
+  assert.deepEqual(ROOMS, { party: 'party', fiverow: 'fiverow', courtpiece: 'courtpiece' });
 });
 
 test('sanitizeDisplayName strips junk, trims, limits length, and falls back', () => {

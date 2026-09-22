@@ -21,7 +21,11 @@ export const COURT_PIECE_TOTAL_TRICKS = 13;
  * and the deal starts with no trump. The first time any player cannot
  * follow suit, the card they play sets the trump for the rest of the deal,
  * and their team becomes the "trump-calling" team for kot purposes.
+ *
+ * Whoever holds the two of clubs leads the first trick, and that card
+ * must be the first card played.
  */
+export const OPENING_CARD: Card = { rank: '2', suit: 'clubs' };
 export type DealResult =
   /** A team collected 7 or more, but not all 13. */
   | 'win'
@@ -40,10 +44,17 @@ export function classifyDeal(collected: readonly [number, number], trumpSetterTe
 
 /**
  * Match length (DECIDED): private tables pick best of 1, 3 or 5 deals;
- * public tables play one deal, then offer a rematch.
+ * public tables play one deal, then offer a rematch. A kot counts as one
+ * deal win like any other; it is shown as a badge. Between deals the
+ * dealer moves one seat to the right (cosmetic: the two of clubs leads).
  */
-export const COURT_PIECE_PRIVATE_BEST_OF: readonly number[] = [1, 3, 5];
-export const COURT_PIECE_PUBLIC_BEST_OF = 1;
+export type CourtPieceBestOf = 1 | 3 | 5;
+export const COURT_PIECE_PRIVATE_BEST_OF: readonly CourtPieceBestOf[] = [1, 3, 5];
+export const COURT_PIECE_PUBLIC_BEST_OF: CourtPieceBestOf = 1;
+
+export function dealsNeededToWin(bestOf: CourtPieceBestOf): number {
+  return Math.ceil(bestOf / 2);
+}
 
 /** Ace high, two low. */
 export const COURT_PIECE_RANK_ORDER: readonly Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
