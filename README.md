@@ -15,6 +15,8 @@ packages/game-rules/  Rules shared by BOTH the app and the server, so they
                       can never disagree about what a legal move is.
 scripts/              Setup helpers. See setup-windows.ps1.
 docs/ACCOUNTS.md      The accounts and keys only the founder can create.
+docs/ECONOMY.md       How coins work, in plain English, and why it is not gambling.
+supabase/migrations/  The database: profiles and the append-only coin ledger.
 CLAUDE.md             Project memory for the AI CTO. Read it first.
 ```
 

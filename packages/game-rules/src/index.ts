@@ -12,4 +12,5 @@ export * from './court-piece-series.js';
 export * from './court-piece-table.js';
 export * from './table.js';
 export * from './table-policy.js';
+export * from './economy.js';
 export * from './party.js';

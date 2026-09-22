@@ -7,8 +7,7 @@
   architecture or game logic. Never make unilateral design decisions.
 - Explain reasoning in plain English. Give 2–3 options with simple pros
   and cons, recommend one, and wait for the founder's reply.
-- Go step by step. One small, verifiable step at a time.
-- Terminal commands: list them in order, explain what each one does.
+- Go step by step, one verifiable step at a time; list terminal commands in order, explained.
 - Founder only talks to Claude: do all possible in repo/cloud; local = one paste + Yes.
 
 ## 2. What Gamenite is
@@ -23,9 +22,10 @@ iOS-first mobile multiplayer board/card game platform.
 
 ### Social, lobby, economy
 - PUBG-style party lobby (gather, ready, launch); voice carries lobby → match.
-- Ludo Star style economy: NO blockchain/crypto/real-money payouts. Coins/
-  Gems buy table entries (e.g. 500) and cosmetics. Revenue: rewarded and
-  interstitial ads, App Store IAP for coins and cosmetics.
+- Economy (DECIDED, see `docs/ECONOMY.md`): NO blockchain/crypto/real-money
+  payouts. Start 1,000 coins; daily bonus 200; ad reward 100 (max 5/day);
+  tables free/500/2,000/10,000; winners take losers' entries minus a 10%
+  table fee. Revenue: rewarded + interstitial ads, App Store IAP.
 
 ## 3. Apple App Store compliance (non-negotiable)
 - Position and document the product as a **casual social game**, not
@@ -36,21 +36,18 @@ iOS-first mobile multiplayer board/card game platform.
 ## 4. iOS-first engineering rule (strict)
 - ALL code must be written and optimized for iOS deployment first:
   Xcode build, iPhone screen sizes, Safe Areas, Dark Mode, TestFlight.
-- Keep the iOS build simple and App Store-ready; check every dependency
-  for iOS support before adopting it.
-- Android is a confirmed second target, but never a reason to compromise iOS.
+- Keep the iOS build simple and App Store-ready; check every dependency for
+  iOS support. Android is a confirmed second target, never a reason to compromise iOS.
 
 ## 5. Tech stack — DECIDED with the founder on 2026-09-22
 - Frontend: **React Native + Expo (TypeScript)**. One codebase for iOS
   now and Android soon; EAS builds iOS in the cloud (founder is on Windows).
 - Game server: **Colyseus (TS)**, authoritative: deals, hides hands,
   validates moves, syncs state.
-- Voice: **Agora**, billed per connected user-minute, muted or not
-  (~$0.99/1k min after 10k free). Policy (Shape A): voice OFF by default,
-  auto-leave when idle/backgrounded, small free daily allowance, VIP
-  unlimited, extra minutes for coins, server meters minutes. Wrap the SDK.
-- Auth/DB/storage: **Supabase** (Postgres + Auth + Storage). Coin ledger
-  is SQL: one row per coin movement, written ONLY by the server.
+- Voice: **Agora**, billed per connected user-minute (~$0.99/1k after 10k
+  free). Policy: OFF by default, auto-leave when idle, small free daily
+  allowance, VIP unlimited, extra minutes for coins, server meters. Wrap SDK.
+- Auth/DB/storage: **Supabase**. Coin ledger is SQL, one row per movement, server-written ONLY.
 - Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Apple
   (required with any social login), Google, Facebook incl. Facebook friends
   who also play (`user_friends`, Meta review + data-deletion URL). `docs/ACCOUNTS.md`.
@@ -82,14 +79,17 @@ iOS-first mobile multiplayer board/card game platform.
   until trump, the trump-making trick takes the pile, then each banks.
   Double siri: same player two in a row banks, never after tricks 1/2/12,
   only once trump exists, not two ace wins; 13th takes the rest. Private
-  best of 1/3/5 (dealer rotates right), public best of 1 + rematch (all 4
-  agree). Party leader picks game/variant/best-of AND assigns teams (A/B,
-  two a side, partners opposite); launches carry a server-only
-  LAUNCH_SECRET so rooms trust the party's seats and series length.
-- Skeleton (done, pre-login): `PartyRoom` (code join, Ready, leader launch
-  → seat reservations). App: Play tab (`use-party`/`use-fiverow`), TEMPORARY
-  guest token `src/lib/guest.ts`. Server verifies Supabase JWTs (`src/auth.ts`;
-  guests only if ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
+  best of 1/3/5, public best of 1 + rematch (all 4 agree). Leader picks
+  game/variant/best-of and assigns teams (two a side, partners opposite);
+  LAUNCH_SECRET lets rooms trust the party's seats and series length.
+- Economy code: `game-rules/src/economy.ts` (settleTable), SQL in
+  `supabase/migrations/*_economy.sql` (append-only ledger, tested via pglite),
+  server `src/ledger.ts` (memory in dev, Supabase in prod). NOT wired into
+  rooms or the phone yet.
+- Skeleton (done, pre-login): `PartyRoom` (code join, Ready, leader launch →
+  reservations). App Play tab (`use-party`/`use-fiverow`/`use-court-piece`),
+  TEMPORARY guest token. Server verifies Supabase JWTs (`src/auth.ts`; guests
+  only if ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
 - Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`
   (plain keys). Room tests share ONE booted test server; two boots break it.
 
