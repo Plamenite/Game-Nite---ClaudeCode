@@ -32,7 +32,7 @@ export function createStandardDeck(): Card[] {
   return deck;
 }
 
-/** Several standard decks combined. Sequence, for example, plays with two. */
+/** Several standard decks combined. Five Row, for example, plays with two. */
 export function createDecks(count: number): Card[] {
   if (!Number.isInteger(count) || count < 1) {
     throw new RangeError(`createDecks: count must be a positive integer, got ${count}`);

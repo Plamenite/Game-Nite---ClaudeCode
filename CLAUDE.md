@@ -16,22 +16,19 @@
 iOS-first mobile multiplayer board/card game platform.
 
 ### Games
-1. **Sequence** — 10x10 board. Two-eyed Jacks are wild (place a chip
-   anywhere); one-eyed Jacks remove an opponent's chip. Five in a row wins.
+1. **Five Row** (id `fiverow`; display name placeholder "Jack Streak",
+   founder picks the final). Resembles a classic board game whose name is
+   TRADEMARKED (Jax/Goliath): NEVER use that name in code, UI, or store
+   copy. 10x10 board, two-eyed Jacks wild, one-eyed Jacks remove a chip.
 2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game.
    Variations required: Double Siri and Blind Rang.
 
-### Social & lobby (inspired by PUBG Mobile's lobby)
-- Visual, team-based party lobby: players gather, ready up, then launch.
-- Persistent real-time voice chat that starts in the lobby and continues
-  seamlessly into the match without reconnecting.
-
-### Economy & monetization (inspired by Ludo Star)
-- NO blockchain, NO crypto, NO real-money payouts. Ever.
-- In-app virtual currency (Coins / Gems) used for table buy-ins
-  (e.g. 500-coin entry) and cosmetics.
-- Revenue: rewarded video ads, interstitial ads, App Store IAP for coin
-  bundles and cosmetics.
+### Social, lobby, economy
+- Party lobby like PUBG Mobile: gather, ready up, launch. Voice chat starts
+  in the lobby and continues into the match without reconnecting.
+- Ludo Star style economy. NO blockchain, NO crypto, NO real-money payouts.
+  Coins/Gems buy table entries (e.g. 500 coins) and cosmetics. Revenue:
+  rewarded video ads, interstitial ads, App Store IAP for coins/cosmetics.
 
 ## 3. Apple App Store compliance (non-negotiable)
 - Position and document the product as a **casual social game**, not
@@ -43,16 +40,16 @@ iOS-first mobile multiplayer board/card game platform.
 ## 4. iOS-first engineering rule (strict)
 - ALL code must be written and optimized for iOS deployment first:
   Xcode build, iPhone screen sizes, Safe Areas, Dark Mode, TestFlight.
-- Prefer approaches that keep the iOS build simple and App Store-ready.
-- Check every dependency for iOS support before adopting it.
+- Keep the iOS build simple and App Store-ready; check every dependency
+  for iOS support before adopting it.
 - Android is a confirmed second target (very important to the founder),
   but never a reason to compromise the iOS build.
 
 ## 5. Tech stack — DECIDED with the founder on 2026-09-22
 - Frontend: **React Native + Expo (TypeScript)**. One codebase for iOS
   now and Android soon; EAS builds iOS in the cloud (founder is on Windows).
-- Game server: **Colyseus (TypeScript)**, authoritative: it deals, hides
-  hands, validates moves, syncs state.
+- Game server: **Colyseus (TS)**, authoritative: deals, hides hands,
+  validates moves, syncs state.
 - Voice: **Agora**, billed per connected user-minute, muted or not
   (~$0.99/1k min after 10k free/month). Policy (Shape A, agreed): voice
   OFF by default/opt-in, auto-leave when idle/backgrounded, small free
@@ -64,6 +61,8 @@ iOS-first mobile multiplayer board/card game platform.
   with Apple (required by Apple when any social login exists), Google,
   Facebook incl. Facebook friends who also play (`user_friends`, needs
   Meta App Review + data-deletion URL). Setup guide: `docs/ACCOUNTS.md`.
+- Friends (DECIDED): Gamenite's own friends list (add by player code or
+  username) plus Facebook friends as an importer on top.
 - Party (DECIDED): PUBG style. Leader creates a party with a join code,
   friends join by code, each taps Ready, ONLY the leader launches.
 - Proposed, not yet decided: AdMob for ads, RevenueCat for IAP/VIP.
@@ -80,15 +79,16 @@ iOS-first mobile multiplayer board/card game platform.
 - `apps/mobile/expo-env.d.ts` is committed so `tsc` works on a fresh clone.
 - Root: `npm run mobile|server|test|typecheck`; CI runs the last two on
   every push. Windows setup: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
-- Game rules are NOT implemented yet: only card primitives, the game
-  catalogue, and fixed facts (Jack eyes, player counts). Spec with founder.
+- Five Row rules core DONE (`game-rules/src/fiverow-*.ts`): our OWN board
+  layout (never regenerate casually), moves, Jacks, dead cards, runs with
+  the one-shared-chip rule, pure match engine, 27 tests. Standard hand sizes
+  and runs-to-win pending the rules interview; not wired to a room. Court
+  Piece rules: not started.
 - Walking skeleton (done, pre-login): `PartyRoom` (create/join by code,
-  Ready, leader-only launch → reserves seats in a `TableRoom` that passes
-  a turn around). App: Play tab via `use-party`/`use-table`; TEMPORARY
-  guest token in `src/lib/guest.ts`. Contracts: `game-rules/src/party.ts`
-  and `table.ts`. Server already verifies Supabase JWTs (`src/auth.ts`,
-  JWKS or HS256; guests only with ALLOW_GUEST_TOKENS=true, dev only).
-  Next: app login screen once the founder's accounts exist.
+  Ready, leader-only launch → seat reservations in a `TableRoom` turn
+  demo). App: Play tab (`use-party`/`use-table`), TEMPORARY guest token in
+  `src/lib/guest.ts`. Server verifies Supabase JWTs (`src/auth.ts`; guests
+  only with ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
 - Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches
   `metadata.code` (plain keys, no dot notation). Room tests share ONE booted
   test server in `test/rooms.test.ts`; two boots per process break it.

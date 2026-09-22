@@ -1,7 +1,7 @@
 # Gamenite
 
 An iOS-first mobile platform for multiplayer board and card games, starting
-with **Sequence** and **Court Piece (Rang)**. Friends gather in a party lobby
+with a five-in-a-row card-and-chip game (internal name Five Row) and **Court Piece (Rang)**. Friends gather in a party lobby
 with voice chat, ready up, and play. Coins and gems are in-app only and are
 never exchangeable for money.
 

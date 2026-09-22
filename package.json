@@ -2,7 +2,7 @@
   "name": "gamenite",
   "private": true,
   "version": "0.1.0",
-  "description": "Gamenite: iOS-first multiplayer board and card game platform (Sequence, Court Piece).",
+  "description": "Gamenite: iOS-first multiplayer board and card game platform (Five Row, Court Piece).",
   "engines": {
     "node": ">=22"
   },

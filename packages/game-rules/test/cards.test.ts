@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { cardId, createDecks, createStandardDeck, shuffle } from '../src/cards.js';
 import { GAMES, getGame } from '../src/games.js';
-import { isOneEyedJack, isTwoEyedJack } from '../src/sequence.js';
+import { isOneEyedJack, isTwoEyedJack } from '../src/fiverow.js';
 
 /** Small deterministic random source so shuffle tests are repeatable. */
 function seeded(seed: number) {
@@ -44,7 +44,7 @@ test('shuffle is deterministic for the same random source', () => {
   assert.deepEqual(a, b);
 });
 
-test('Sequence jack helpers', () => {
+test('Five Row jack helpers', () => {
   assert.equal(isOneEyedJack({ rank: 'J', suit: 'spades' }), true);
   assert.equal(isOneEyedJack({ rank: 'J', suit: 'hearts' }), true);
   assert.equal(isTwoEyedJack({ rank: 'J', suit: 'diamonds' }), true);
@@ -56,7 +56,7 @@ test('Sequence jack helpers', () => {
 test('game catalogue lists both launch games', () => {
   assert.deepEqual(
     GAMES.map((g) => g.id),
-    ['sequence', 'court_piece'],
+    ['fiverow', 'court_piece'],
   );
   assert.equal(getGame('court_piece').maxPlayers, 4);
   assert.throws(() => getGame('nope' as never));
