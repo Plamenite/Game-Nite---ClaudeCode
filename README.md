@@ -68,8 +68,10 @@ use the tunnel command.
    card (both spaces taken) can be swapped once per turn. Thirty seconds per
    turn; if you run out, the server plays a random legal card for you.
 
-On your own? The lounge offers **Play now with other players**: Five Row
-1 vs 1, or Court Piece Single Siri with three strangers.
+Fewer than four? Start anyway: the empty seats are filled with other
+players at the same entry, friends stay partners, and a table with other
+players at it is one deal with a rematch vote. On your own, the lounge
+offers **Play now with other players** in every format.
 
 Low on disk space? Use slim setup: it skips VS Code and clears the npm cache.
 

@@ -18,10 +18,14 @@ and when the game ends you are all back in the same lounge.
    door. Anyone already inside can let them in or turn them away; an
    unanswered knock closes after a minute. The leader can remove people.
    Once accounts and friends exist, only friends may knock.
-4. **Starting with fewer than four.** A lounge of two or three may start a
-   four-seat game and the server fills the empty seats with other players
-   at the same tier. NEXT STEP, not built yet: for now the format must be
-   full.
+4. **Starting with fewer than four.** A lounge of one, two or three may
+   start a bigger table; the empty seats are filled with other players at
+   the same entry (quick play lands them there). DECIDED on top of this:
+   two friends at a team table are always partners, sitting opposite;
+   three friends split two and one, the leader's choice, and another player
+   partners the one alone; and any table with other players at it is one
+   deal with a rematch vote, whatever series length the leader picked.
+   Two half-empty lounges do not merge yet; solo players fill them.
 5. **Formats.** The picker only offers formats that seat everyone in the
    lounge or more: 1 vs 1, 3 players, 2 vs 2 for Five Row, and Court Piece
    (always four).
@@ -45,8 +49,9 @@ seat.
 
 1. The lounge itself (done): permanent lounge, knock and answer, remove,
    hand over, formats, stays open under the game, phone Lounge tab.
-2. Fill empty seats with other players when a smaller lounge starts a
-   bigger table.
+2. Fill empty seats with other players (done): the lounge creates the
+   table, holds its members' seats for twenty seconds, and leaves the rest
+   open; only a lounge reservation may choose a seat.
 3. Accounts and friends: friend-only knocking, online status, invites.
 4. Voice, with mute-for-me.
 5. Rewarded ads.

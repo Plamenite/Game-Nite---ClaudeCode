@@ -187,8 +187,10 @@ export interface LoungeSnapshot {
   requests: LoungeRequestSnapshot[];
   /** True when the leader is allowed to start right now. */
   canStart: boolean;
-  /** Seats the chosen format still needs beyond the members present. */
+  /** Seats the chosen format still needs beyond the members present; filled with other players. */
   seatsToFill: number;
+  /** DECIDED: a table with other players at it is one deal with a rematch vote. */
+  bestOfAtTable: number;
 }
 
 /** Minimal shape of the server's live lounge state that we read from. */
@@ -222,28 +224,37 @@ export function teamsBalanced(members: readonly { team: number }[]): boolean {
 }
 
 /**
- * The one rule for starting, shared so the app can grey out the button
- * honestly. Until empty seats can be filled with other players, the lounge
- * must have exactly as many members as the format has seats.
+ * DECIDED: a lounge may start a table bigger than itself; the empty seats
+ * are filled with other players at the same tier. Two friends at a team
+ * table are always partners. Three friends split two and one, the
+ * leader's choice of sides. A full lounge needs two a side.
  */
+export function sidesAllowed(members: readonly { team?: number }[], game: string, players: number): boolean {
+  if (!isTeamGame(game, players)) return true;
+  const teams = members.map((m) => ({ team: m.team ?? 0 }));
+  if (members.length === players) return teamsBalanced(teams);
+  if (members.length === 3) return !teamsBalanced(teams) && teams.some((m) => m.team !== teams[0].team);
+  return true;
+}
+
+/** The one rule for starting, shared so the app can grey out the button honestly. */
 export function canStartLounge(
   members: readonly { ready: boolean; team?: number }[],
   status: string,
   game: string,
   players: number,
 ): boolean {
-  if (status !== 'open' || !isLoungeFormat(game, players) || members.length !== players) return false;
+  if (status !== 'open' || !isLoungeFormat(game, players) || members.length < 1 || members.length > players) return false;
   if (!members.every((m) => m.ready)) return false;
-  if (isTeamGame(game, players)) {
-    return teamsBalanced(members.map((m) => ({ team: m.team ?? 0 })));
-  }
-  return true;
+  return sidesAllowed(members, game, players);
 }
 
 /**
- * Seats at the table, in join order within each team so partners sit
- * opposite: team 0 takes seats 0 and 2, team 1 takes seats 1 and 3.
- * Solo games (Five Row 1v1 or three players) seat in join order.
+ * Seats at the table. Solo games (Five Row 1v1 or three players) seat in
+ * join order. Team games: side 0 takes seats 0 and 2, side 1 takes 1 and
+ * 3, so partners sit opposite. Two friends are seated as partners whatever
+ * their badges say; three friends: the pair keeps its side, the single
+ * takes the first seat of the other side; the rest is left for others.
  */
 export function seatsForLounge(members: readonly { sessionId: string; team: number }[], game: string, players: number): Map<string, number> {
   const seats = new Map<string, number>();
@@ -252,6 +263,10 @@ export function seatsForLounge(members: readonly { sessionId: string; team: numb
     return seats;
   }
   const slots: Record<number, number[]> = { 0: [0, 2], 1: [1, 3] };
+  if (members.length <= 2) {
+    members.forEach((m, i) => seats.set(m.sessionId, slots[0][i]));
+    return seats;
+  }
   for (const m of members) {
     const seat = slots[m.team]?.shift();
     if (seat !== undefined) seats.set(m.sessionId, seat);
@@ -287,5 +302,6 @@ export function toLoungeSnapshot(state: LoungeStateLike): LoungeSnapshot {
     requests,
     canStart: canStartLounge(members, state.status, state.game, state.players),
     seatsToFill: Math.max(state.players - members.length, 0),
+    bestOfAtTable: members.length < state.players ? 1 : state.bestOf,
   };
 }

@@ -8,6 +8,7 @@ import {
   LOUNGE_SIZE,
   canStartLounge,
   formatsForLounge,
+  sidesAllowed,
   generateLoungeCode,
   isLoungeFormat,
   isTeamGame,
@@ -45,14 +46,26 @@ test('the picker only offers formats that seat everyone in the lounge', () => {
   assert.equal(isLoungeFormat('fiverow', 3), true);
 });
 
-test('canStartLounge needs an open lounge, a full format, and everyone ready', () => {
-  assert.equal(canStartLounge([{ ready: true }], 'open', 'fiverow', 2), false, 'a seat is still empty');
+test('canStartLounge needs an open lounge, everyone ready, and no more people than seats', () => {
+  assert.equal(canStartLounge([{ ready: true }], 'open', 'fiverow', 2), true, 'an empty seat is filled with another player');
   assert.equal(canStartLounge([{ ready: true }, { ready: false }], 'open', 'fiverow', 2), false, 'not all ready');
   assert.equal(canStartLounge([{ ready: true }, { ready: true }], 'starting', 'fiverow', 2), false, 'already starting');
   assert.equal(canStartLounge([{ ready: true }, { ready: true }], 'open', 'fiverow', 2), true);
+  assert.equal(canStartLounge([{ ready: true }, { ready: true }, { ready: true }], 'open', 'fiverow', 2), false, 'more people than seats');
+  assert.equal(canStartLounge([], 'open', 'fiverow', 2), false);
   const three = [{ ready: true, team: 0 }, { ready: true, team: 1 }, { ready: true, team: 0 }];
-  assert.equal(canStartLounge(three, 'open', 'courtpiece', 4), false, 'Court Piece needs four');
+  assert.equal(canStartLounge(three, 'open', 'courtpiece', 4), true, 'three friends plus one other player');
   assert.equal(canStartLounge(three, 'open', 'fiverow', 3), true, 'three players: solo game, teams ignored');
+});
+
+test('sides: a full lounge needs two a side, three friends split two and one, two friends are always partners', () => {
+  const same = (n: number) => Array.from({ length: n }, () => ({ team: 0 }));
+  assert.equal(sidesAllowed(same(4), 'courtpiece', 4), false);
+  assert.equal(sidesAllowed(same(3), 'courtpiece', 4), false, 'three on one side leaves nobody opposite');
+  assert.equal(sidesAllowed([{ team: 0 }, { team: 0 }, { team: 1 }], 'courtpiece', 4), true);
+  assert.equal(sidesAllowed([{ team: 0 }, { team: 1 }, { team: 1 }], 'fiverow', 4), true);
+  assert.equal(sidesAllowed([{ team: 0 }, { team: 1 }], 'courtpiece', 4), true, 'badges do not matter for two: they will be partners');
+  assert.equal(sidesAllowed(same(3), 'fiverow', 3), true, 'no sides in a solo game');
 });
 
 test('team games need two on each side, and partners are seated opposite', () => {
@@ -73,6 +86,14 @@ test('team games need two on each side, and partners are seated opposite', () =>
   assert.deepEqual([...seats.entries()], [['a', 0], ['b', 1], ['c', 3], ['d', 2]], 'team 0 at 0 and 2, team 1 at 1 and 3');
   const solo = seatsForLounge(members.slice(0, 3), 'fiverow', 3);
   assert.deepEqual([...solo.values()], [0, 1, 2], 'solo games seat in join order');
+
+  // Two friends at a four-seat team table: partners, whatever their badges say.
+  assert.deepEqual([...seatsForLounge(members.slice(0, 2), 'courtpiece', 4).entries()], [['a', 0], ['b', 2]]);
+  // Three friends: the pair keeps its side, the single takes the first seat opposite.
+  assert.deepEqual([...seatsForLounge([{ sessionId: 'a', team: 1 }, { sessionId: 'b', team: 1 }, { sessionId: 'c', team: 0 }], 'courtpiece', 4).entries()], [['a', 1], ['b', 3], ['c', 0]]);
+  assert.deepEqual([...seatsForLounge([{ sessionId: 'a', team: 0 }, { sessionId: 'b', team: 1 }, { sessionId: 'c', team: 0 }], 'fiverow', 4).entries()], [['a', 0], ['b', 1], ['c', 2]]);
+  // One friend: seat 0, everyone else fills in.
+  assert.deepEqual([...seatsForLounge(members.slice(0, 1), 'courtpiece', 4).entries()], [['a', 0]]);
 });
 
 test('toLoungeSnapshot marks the leader, lists who is at the door, and counts empty seats', () => {
@@ -89,9 +110,11 @@ test('toLoungeSnapshot marks the leader, lists who is at the door, and counts em
   assert.deepEqual(snap.requests, [{ sessionId: 'R', name: 'Ali' }]);
   assert.equal(snap.canStart, true);
   assert.equal(snap.seatsToFill, 0);
-  const bigger = toLoungeSnapshot({ code: 'K7PM3XAB', leaderSessionId: 'L', status: 'open', game: 'courtpiece', players: 4, variant: 'single_siri', bestOf: 1, entry: 0, members, requests });
-  assert.equal(bigger.canStart, false);
+  assert.equal(snap.bestOfAtTable, 1);
+  const bigger = toLoungeSnapshot({ code: 'K7PM3XAB', leaderSessionId: 'L', status: 'open', game: 'courtpiece', players: 4, variant: 'single_siri', bestOf: 3, entry: 0, members, requests });
+  assert.equal(bigger.canStart, true, 'two friends plus two other players');
   assert.equal(bigger.seatsToFill, 2);
+  assert.equal(bigger.bestOfAtTable, 1, 'with other players at the table it is one deal, whatever the leader picked');
 });
 
 test('the lounge explains why it closed the door', () => {

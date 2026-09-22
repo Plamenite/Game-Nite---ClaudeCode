@@ -356,12 +356,6 @@ describe("LoungeRoom (where friends gather)", () => {
     assert.strictEqual(lounge.state.players, 4, "Court Piece is always four seats");
     assert.strictEqual(toLoungeSnapshot(leader.state).seatsToFill, 1);
 
-    for (const c of [leader, ...others]) c.send("set_ready", { ready: true });
-    for (let i = 0; i < 3; i++) await lounge.waitForMessage("set_ready");
-    refused = nextMessage<{ reason: string }>(leader, "refused");
-    leader.send("start", {});
-    assert.match((await refused).reason, /1 more player/i);
-
     leader.send("set_game", { game: "fiverow", players: 3 });
     await lounge.waitForMessage("set_game");
     await lounge.waitForNextPatch();
@@ -403,6 +397,111 @@ describe("LoungeRoom (where friends gather)", () => {
     assert.ok(view.turnSessionId, "the first turn has started");
     assert.deepStrictEqual(toFiveRowSnapshot(tableB.state).seats, view.seats);
     assert.strictEqual((await fetchHand(tableA)).length, 7);
+  });
+
+  it("two friends start Court Piece as partners; two other players fill the other side; it is one deal", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali"]);
+    const [ali] = others;
+    leader.send("set_game", { game: "courtpiece", bestOf: 3 });
+    await lounge.waitForMessage("set_game");
+    // Their badges say opposite sides; two friends are partners regardless.
+    assert.deepStrictEqual([leader, ali].map((c) => lounge.state.members.get(c.sessionId).team), [0, 1]);
+    for (const c of [leader, ali]) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 2; i++) await lounge.waitForMessage("set_ready");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(toLoungeSnapshot(leader.state).canStart, true);
+    assert.strictEqual(toLoungeSnapshot(leader.state).bestOfAtTable, 1);
+
+    const seats = [leader, ali].map((c) => nextMessage<any>(c, "table_ready"));
+    leader.send("start", {});
+    const [seatA, seatB] = await Promise.all(seats);
+    const zainTable = await colyseus.sdk.consumeSeatReservation<CourtPieceState>(seatA);
+    await colyseus.sdk.consumeSeatReservation<CourtPieceState>(seatB);
+    const table = colyseus.getRoomById<CourtPieceState>(seatA.roomId);
+    assert.strictEqual(table.state.phase, "waiting", "two seats are still empty");
+
+    // Two strangers on quick play land at the same table, on the other side.
+    colyseus.sdk.auth.token = "guest-s1";
+    const s1 = await colyseus.sdk.joinOrCreate<CourtPieceState>("courtpiece", { variant: "single_siri", entry: 0, name: "Stranger1" });
+    colyseus.sdk.auth.token = "guest-s2";
+    const s2 = await colyseus.sdk.joinOrCreate<CourtPieceState>("courtpiece", { variant: "single_siri", entry: 0, name: "Stranger2" });
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.strictEqual(s1.roomId, seatA.roomId);
+    assert.strictEqual(s2.roomId, seatA.roomId);
+    await waitFor(() => table.state.phase === "playing", 3000, "deal start");
+    await table.waitForNextPatch();
+
+    const snap = toCourtPieceSnapshot(zainTable.state);
+    assert.deepStrictEqual(snap.seats.map((s) => s.name), ["Zain", "Stranger1", "Ali", "Stranger2"], "friends at 0 and 2, strangers at 1 and 3");
+    assert.deepStrictEqual(snap.seats.map((s) => s.team), [0, 1, 0, 1]);
+    assert.strictEqual(table.state.bestOf, 1, "with other players it is one deal, not the leader's best of three");
+  });
+
+  it("three friends start 2 vs 2: the pair keeps its side, the single sits opposite, one other player completes it", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali", "Sara"]);
+    const [ali, sara] = others;
+    leader.send("set_game", { game: "fiverow", players: 4 });
+    await lounge.waitForMessage("set_game");
+    // All three on one side leaves nobody opposite: refused.
+    leader.send("set_team", { sessionId: ali.sessionId, team: 0 });
+    await lounge.waitForMessage("set_team");
+    for (const c of [leader, ali, sara]) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 3; i++) await lounge.waitForMessage("set_ready");
+    const refused = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("start", {});
+    assert.match((await refused).reason, /two and one/i);
+
+    // Zain + Sara together, Ali alone.
+    leader.send("set_team", { sessionId: ali.sessionId, team: 1 });
+    await lounge.waitForMessage("set_team");
+    for (const c of [leader, ali, sara]) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 3; i++) await lounge.waitForMessage("set_ready");
+    await lounge.waitForNextPatch();
+    const seats = [leader, ali, sara].map((c) => nextMessage<any>(c, "table_ready"));
+    leader.send("start", {});
+    const reservations = await Promise.all(seats);
+    const tables: any[] = [];
+    for (const r of reservations) tables.push(await colyseus.sdk.consumeSeatReservation<FiveRowState>(r));
+    const table = colyseus.getRoomById<FiveRowState>(reservations[0].roomId);
+
+    colyseus.sdk.auth.token = "guest-s4";
+    const stranger = await colyseus.sdk.joinOrCreate<FiveRowState>("fiverow", { players: 4, entry: 0, name: "Stranger" });
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.strictEqual(stranger.roomId, table.roomId);
+    await waitFor(() => table.state.phase === "playing", 3000, "match start");
+    await table.waitForNextPatch();
+    const teamOf = (name: string) => toFiveRowSnapshot(tables[0].state).seats.find((s) => s.name === name)?.team;
+    assert.strictEqual(teamOf("Zain"), 0);
+    assert.strictEqual(teamOf("Sara"), 0, "the pair stays together");
+    assert.strictEqual(teamOf("Ali"), 1);
+    assert.strictEqual(teamOf("Stranger"), 1, "the other player partners the single");
+  });
+
+  it("an early stranger cannot take a seat the lounge is holding, and a phone cannot pick a seat", async () => {
+    const { lounge, leader, others } = await gather("Zain", ["Ali"]);
+    const [ali] = others;
+    leader.send("set_game", { game: "courtpiece" });
+    await lounge.waitForMessage("set_game");
+    for (const c of [leader, ali]) c.send("set_ready", { ready: true });
+    for (let i = 0; i < 2; i++) await lounge.waitForMessage("set_ready");
+    const seats = [leader, ali].map((c) => nextMessage<any>(c, "table_ready"));
+    leader.send("start", {});
+    const [seatA, seatB] = await Promise.all(seats);
+
+    // The stranger arrives before either friend has sat down, and even asks for seat 0.
+    colyseus.sdk.auth.token = "guest-early";
+    const early = await colyseus.sdk.joinOrCreate<CourtPieceState>("courtpiece", { variant: "single_siri", entry: 0, name: "Early", seat: 0 } as any);
+    colyseus.sdk.auth.token = "guest-TEST";
+    assert.strictEqual(early.roomId, seatA.roomId);
+    const table = colyseus.getRoomById<CourtPieceState>(seatA.roomId);
+    await table.waitForNextPatch();
+    assert.strictEqual(table.state.seats.get(early.sessionId).seat, 1, "seats 0 and 2 are held for the friends");
+
+    const zainTable = await colyseus.sdk.consumeSeatReservation<CourtPieceState>(seatA);
+    await colyseus.sdk.consumeSeatReservation<CourtPieceState>(seatB);
+    await table.waitForNextPatch();
+    assert.strictEqual(table.state.seats.get(zainTable.sessionId).seat, 0);
+    assert.deepStrictEqual([...table.state.seats.values()].map((s) => s.seat).sort(), [0, 1, 2]);
   });
 
   it("/me tells a phone its player code, which is also its lounge code", async () => {

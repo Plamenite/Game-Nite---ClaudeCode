@@ -249,12 +249,18 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
 
     const members = [...this.state.members.entries()].map(([sessionId, m]) => ({ sessionId, ready: m.ready, team: m.team }));
     if (!canStartLounge(members, this.state.status, this.state.game, this.state.players)) {
-      const missing = this.state.players - members.length;
-      if (missing > 0) return this.refuse(leader, `This table needs ${missing} more ${missing === 1 ? "player" : "players"}.`);
-      if (isTeamGame(this.state.game, this.state.players) && members.every((m) => m.ready)) return this.refuse(leader, "Sides must be two against two.");
+      if (members.length > this.state.players) return this.refuse(leader, "Pick a table with a seat for everyone here.");
+      if (members.every((m) => m.ready) && isTeamGame(this.state.game, this.state.players)) {
+        return this.refuse(leader, members.length === 3 ? "Sides must be two and one." : "Sides must be two against two.");
+      }
       return this.refuse(leader, "Everyone must be ready first.");
     }
     const seats = seatsForLounge(members, this.state.game, this.state.players);
+    // DECIDED: empty seats are filled with other players at the same tier,
+    // and a table with other players at it is one deal with a rematch vote.
+    const seatsToFill = this.state.players - members.length;
+    const bestOf = seatsToFill > 0 ? 1 : this.state.bestOf;
+    const heldSeats = [...seats.values()];
 
     this.state.status = "starting";
     try {
@@ -262,9 +268,10 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
       if (this.state.game === "courtpiece") {
         table = await matchMaker.createRoom(ROOMS.courtpiece, {
           variant: this.state.variant,
-          bestOf: this.state.bestOf,
+          bestOf,
           entry: this.state.entry,
           launchSecret: LAUNCH_SECRET,
+          heldSeats,
         });
       } else {
         const config = fiverowConfigForPlayers(this.state.players);
@@ -272,14 +279,20 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
           this.state.status = "open";
           return this.refuse(leader, "Five Row needs 2, 3 or 4 players.");
         }
-        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players, entry: this.state.entry, launchSecret: LAUNCH_SECRET });
+        table = await matchMaker.createRoom(ROOMS.fiverow, { players: config.players, entry: this.state.entry, launchSecret: LAUNCH_SECRET, heldSeats });
       }
 
       // Reserve one seat per member and hand each phone its own reservation.
+      // The secret rides inside the reservation (server-side only), which is
+      // how the table knows this seat choice is the lounge's, not a phone's.
       for (const client of this.clients) {
         const member = this.state.members.get(client.sessionId);
         if (!member) continue;
-        const reservation = await matchMaker.reserveSeatFor(table, { name: member.name, seat: seats.get(client.sessionId) }, client.auth);
+        const reservation = await matchMaker.reserveSeatFor(
+          table,
+          { name: member.name, seat: seats.get(client.sessionId), launchSecret: LAUNCH_SECRET },
+          client.auth,
+        );
         client.send(LOUNGE_EVENTS.tableReady, reservation);
       }
     } catch (error) {

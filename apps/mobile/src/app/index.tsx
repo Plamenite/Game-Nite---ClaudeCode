@@ -3,6 +3,7 @@ import {
   COURT_PIECE_PRIVATE_BEST_OF,
   COURT_PIECE_VARIANTS,
   GAMES,
+  LOUNGE_FORMATS,
   LOUNGE_SIZE,
   TABLE_ENTRY_TIERS,
   formatsForLounge,
@@ -152,7 +153,8 @@ function LoungeView({
                 <Button label={starting ? 'Starting…' : 'Start'} onPress={lounge.start} disabled={!snap.canStart || starting} />
                 {snap.seatsToFill > 0 ? (
                   <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-                    This table needs {snap.seatsToFill} more {snap.seatsToFill === 1 ? 'player' : 'players'}. Filling empty seats with other players is coming next.
+                    {snap.seatsToFill === 1 ? 'One empty seat goes' : `${snap.seatsToFill} empty seats go`} to other players at the same entry.
+                    {snap.game === 'courtpiece' ? ' With other players at the table it is one deal, then a rematch vote.' : ''}
                   </ThemedText>
                 ) : null}
               </>
@@ -186,6 +188,8 @@ function Seats({
   lounge: ReturnType<typeof useLounge>;
 }) {
   const teamGame = isTeamGame(snap.game, snap.players);
+  // Two friends at a team table are always partners; sides only matter from three up.
+  const showSides = teamGame && snap.members.length >= 3;
   const empty = Math.max(LOUNGE_SIZE - snap.members.length, 0);
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
@@ -200,7 +204,7 @@ function Seats({
                 {isMe ? ' (you)' : ''}
               </ThemedText>
               <View style={styles.rowRight}>
-                {teamGame ? (
+                {showSides ? (
                   <Pressable
                     disabled={!isLeader || starting}
                     onPress={() => lounge.setTeam(member.sessionId, member.team === 0 ? 1 : 0)}
@@ -232,9 +236,14 @@ function Seats({
           {'  '}Empty seat
         </ThemedText>
       ))}
-      {teamGame && isLeader ? (
+      {showSides && isLeader ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Tap A or B to move a player. Two a side; partners sit opposite.
+          {snap.members.length === LOUNGE_SIZE ? 'Tap A or B to move a player. Two a side; partners sit opposite.' : 'Tap A or B to move a player. Two together, one alone; another player partners the one alone.'}
+        </ThemedText>
+      ) : null}
+      {teamGame && snap.members.length === 2 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          You two play as partners. Two other players take the other side.
         </ThemedText>
       ) : null}
     </ThemedView>
@@ -252,7 +261,7 @@ function GamePicker({ snap, isLeader, starting, lounge }: { snap: LoungeSnapshot
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="small" themeColor="textSecondary">
           {gameName} · {sizeName}
-          {snap.game === 'courtpiece' ? ` · ${variantName} · best of ${snap.bestOf}` : ''}
+          {snap.game === 'courtpiece' ? ` · ${variantName} · best of ${snap.bestOfAtTable}` : ''}
           {` · entry ${tierLabel(snap.entry)}`}
         </ThemedText>
       </ThemedView>
@@ -288,11 +297,17 @@ function GamePicker({ snap, isLeader, starting, lounge }: { snap: LoungeSnapshot
               <Choice key={v.id} label={v.name} selected={snap.variant === v.id} onPress={() => lounge.setGame({ game: 'courtpiece', variant: v.id })} />
             ))}
           </View>
-          <View style={styles.choiceRow}>
-            {COURT_PIECE_PRIVATE_BEST_OF.map((n) => (
-              <Choice key={n} label={`Best of ${n}`} selected={snap.bestOf === n} onPress={() => lounge.setGame({ game: 'courtpiece', bestOf: n })} />
-            ))}
-          </View>
+          {snap.seatsToFill === 0 ? (
+            <View style={styles.choiceRow}>
+              {COURT_PIECE_PRIVATE_BEST_OF.map((n) => (
+                <Choice key={n} label={`Best of ${n}`} selected={snap.bestOf === n} onPress={() => lounge.setGame({ game: 'courtpiece', bestOf: n })} />
+              ))}
+            </View>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary">
+              Best of 3 or 5 needs a full lounge of four friends.
+            </ThemedText>
+          )}
         </>
       )}
       <ThemedText type="small" themeColor="textSecondary">
@@ -332,18 +347,38 @@ function KnockCard({ lounge, busy }: { lounge: ReturnType<typeof useLounge>; bus
 
 function QuickPlayCard({ table, cards, busy }: { table: ReturnType<typeof useFiveRow>; cards: ReturnType<typeof useCourtPiece>; busy: boolean }) {
   const [entry, setEntry] = useState<number>(0);
+  const [game, setGame] = useState<'fiverow' | 'courtpiece'>('fiverow');
+  const [players, setPlayers] = useState<2 | 3 | 4>(2);
+  const [variant, setVariant] = useState<'single_siri' | 'double_siri'>('single_siri');
+  const play = () => {
+    if (game === 'courtpiece') void cards.quickPlay(variant, entry);
+    else void table.quickPlay(players, entry);
+  };
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <ThemedText type="small" themeColor="textSecondary">
-        On your own? Play now with other players · table entry
+        On your own? Play now with other players
+      </ThemedText>
+      <View style={styles.choiceRow}>
+        <Choice label={GAMES[0].name} selected={game === 'fiverow'} onPress={() => setGame('fiverow')} />
+        <Choice label="Court Piece" selected={game === 'courtpiece'} onPress={() => setGame('courtpiece')} />
+      </View>
+      <View style={styles.choiceRow}>
+        {game === 'fiverow'
+          ? LOUNGE_FORMATS.filter((f) => f.game === 'fiverow').map((f) => (
+              <Choice key={f.players} label={f.name} selected={players === f.players} onPress={() => setPlayers(f.players)} />
+            ))
+          : COURT_PIECE_VARIANTS.map((v) => <Choice key={v.id} label={v.name} selected={variant === v.id} onPress={() => setVariant(v.id)} />)}
+      </View>
+      <ThemedText type="small" themeColor="textSecondary">
+        Table entry
       </ThemedText>
       <View style={styles.choiceRow}>
         {TABLE_ENTRY_TIERS.map((tier) => (
           <Choice key={tier} label={tierLabel(tier)} selected={entry === tier} onPress={() => setEntry(tier)} />
         ))}
       </View>
-      <Button label={busy ? 'Connecting…' : `${GAMES[0].name} 1 vs 1`} onPress={() => void table.quickPlay(2, entry)} disabled={busy} />
-      <Button label={busy ? 'Connecting…' : 'Court Piece · Single Siri'} onPress={() => void cards.quickPlay('single_siri', entry)} disabled={busy} />
+      <Button label={busy ? 'Connecting…' : 'Play now'} onPress={play} disabled={busy} />
     </ThemedView>
   );
 }

@@ -47,13 +47,23 @@ export interface CourtPieceRoomOptions {
   /** Coins each seat pays: 0, 500, 2000 or 10000. */
   entry?: number;
   launchSecret?: string;
+  /** Seats the lounge reserved for its members; other players take the rest. */
+  heldSeats?: number[];
 }
 
-/** What the phone sends when joining; `seat` only counts on a lounge start. */
+/**
+ * What arrives in onJoin. A lounge reservation carries `seat` and the
+ * launch secret (set server-side, never seen by phones); a phone's own
+ * quick-play options never can, so a phone cannot pick a seat.
+ */
 export interface CourtPieceJoinOptions {
   name?: string;
   seat?: number;
+  launchSecret?: string;
 }
+
+/** How long a lounge's held seats wait for their owners before anyone may take them. */
+const HELD_SEAT_MS = 20_000;
 
 /**
  * One Court Piece table. The pure engine decides the game; this room
@@ -68,6 +78,8 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
   private order: (string | undefined)[] = new Array(PLAYERS).fill(undefined);
   private seatOf = new Map<string, number>();
   private trusted = false;
+  /** Seats reserved by the lounge, so an early stranger cannot sit in them. */
+  private held = new Set<number>();
   private entry = 0;
   private userOf = new Map<string, string>();
   private refunded = new Set<string>();
@@ -99,6 +111,10 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     this.state.variant = variant;
     this.state.bestOf = bestOf;
     this.trusted = isTrustedLaunch(options);
+    if (this.trusted && Array.isArray(options?.heldSeats)) {
+      this.held = new Set(options!.heldSeats!.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < PLAYERS));
+      this.clock.setTimeout(() => this.held.clear(), HELD_SEAT_MS);
+    }
     this.entry = isTableEntry(options?.entry) ? Number(options!.entry) : 0;
     this.state.entry = this.entry;
     await this.setMetadata({ variant, entry: this.entry });
@@ -109,11 +125,17 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
   async onJoin(client: Client, options: CourtPieceJoinOptions | undefined) {
     const auth = client.auth as PlayerAuth;
     const name = sanitizeDisplayName(options?.name);
+    // Look before charging: never take coins from someone who cannot sit.
+    if (!this.hasSeatFor(options)) throw new ServerError(409, "No free seat at this table right now.");
     await this.chargeSeat(auth, name);
+    if (!this.hasSeatFor(options)) {
+      // Someone slipped in during the charge: give the coins straight back.
+      if (this.entry > 0) await getLedger().settleTable(this.tableKey(), [{ playerId: auth.userId, amount: this.entry, kind: "table_refund" }]);
+      throw new ServerError(409, "No free seat at this table right now.");
+    }
 
-    const wanted = Number(options?.seat);
-    const free = this.order.findIndex((id) => id === undefined);
-    const seatIndex = this.trusted && Number.isInteger(wanted) && wanted >= 0 && wanted < PLAYERS && this.order[wanted] === undefined ? wanted : free;
+    const seatIndex = this.seatFor(options);
+    this.held.delete(seatIndex);
 
     const seat = new CourtPieceSeat();
     seat.name = name;
@@ -253,6 +275,18 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
   }
 
   /** Wallet check and entry charge, BEFORE any seat state changes. Throws to reject the join. */
+  /** The seat this joiner would get: the lounge's choice for its members, else the first free seat nobody is holding. */
+  private seatFor(options: CourtPieceJoinOptions | undefined): number {
+    const wanted = Number(options?.seat);
+    const fromLounge = this.trusted && isTrustedLaunch(options);
+    if (fromLounge && Number.isInteger(wanted) && wanted >= 0 && wanted < PLAYERS && this.order[wanted] === undefined) return wanted;
+    return this.order.findIndex((id, i) => id === undefined && !this.held.has(i));
+  }
+
+  private hasSeatFor(options: CourtPieceJoinOptions | undefined): boolean {
+    return this.seatFor(options) >= 0;
+  }
+
   private async chargeSeat(auth: PlayerAuth, name: string) {
     const ledger = getLedger();
     await ledger.ensureProfile(auth.userId, name, auth.guest);

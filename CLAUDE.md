@@ -10,8 +10,7 @@
 - One verifiable step at a time, commands explained. Founder only talks to
   Claude: do all possible in repo/cloud; local = one paste + Yes.
 
-## 2. What Gamenite is: an iOS-first mobile multiplayer board/card platform
-### Games
+## 2. What Gamenite is: an iOS-first mobile multiplayer board/card platform. Games:
 1. **Five Row** (id `fiverow`; display name placeholder "Jack Streak").
    Resembles a classic board game whose name is TRADEMARKED (Jax/Goliath):
    NEVER use it in code, UI, or store copy. 10x10 board, Jacks wild/remove.
@@ -50,9 +49,9 @@
 - Lounge (DECIDED, `docs/LOUNGE.md`): PUBG style, 4 seats, first screen.
   Every player owns one; code = player code. Friends knock, anyone inside
   lets them in; leader picks game/sides/tier, removes, hands over lead; all
-  Ready, leader starts; lounge survives the game. Formats must seat everyone
-  (fill with strangers = NEXT). Voice: mic off by default, mute-for-me a must.
-- Bundle id `app.plamenite.gamenite`; domain plamenite.app (CONFIRMED). Undecided: AdMob, RevenueCat.
+  Ready, leader starts; lounge survives the game. Empty seats fill with
+  strangers (friends stay partners, best of 1). Voice: mic off, mute-for-me.
+- Bundle id `app.plamenite.gamenite`; domain plamenite.app. Undecided: AdMob, RevenueCat.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
@@ -86,7 +85,8 @@
   again. Wallet: typed router `src/wallet.ts` (`/wallet`, `/wallet/daily`,
   `/me`), phone wallet card. Ludo Star roadmap (spin, gifts) in ECONOMY.md.
 - Lounge LIVE: `game-rules/src/lounge.ts`, `LoungeRoom` (knock/accept/decline
-  with close codes, kick, make_leader, start → reservations, back to open),
+  with close codes, kick, make_leader, start → reservations + heldSeats, only
+  a reservation carrying LAUNCH_SECRET may pick a seat, back to open),
   app Lounge tab `app/index.tsx` + `use-lounge`, Games tab. TEMPORARY guest
   token. Server verifies Supabase JWTs (`src/auth.ts`; guests only if
   ALLOW_GUEST_TOKENS=true). Next: login.
