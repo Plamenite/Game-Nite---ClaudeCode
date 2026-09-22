@@ -26,4 +26,6 @@ export interface MeSnapshot {
   /** 8 letters and digits: friends add you with it, and it opens your lounge. */
   playerCode: string;
   guest: boolean;
+  /** What other players see. Imported from the login account; guests get "Player 12345". POST /me { name } changes it. */
+  name: string;
 }

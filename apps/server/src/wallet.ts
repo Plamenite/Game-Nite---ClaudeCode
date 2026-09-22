@@ -25,13 +25,48 @@ async function snapshot(player: PlayerAuth): Promise<WalletSnapshot> {
  * Wallet endpoints, registered on the typed router so the SDK knows the paths.
  * Only the server ever moves coins; the phone just asks.
  */
+async function me(player: PlayerAuth): Promise<MeSnapshot> {
+  const ledger = getLedger();
+  // First sight: the name comes from the login account, or becomes "Player 12345".
+  await ledger.ensureProfile(player.userId, player.name ?? "", player.guest);
+  return { playerCode: await ledger.playerCode(player.userId), guest: player.guest, name: await ledger.displayName(player.userId) };
+}
+
+/** POST /me body: { name: string }. A tiny validator in the router's "standard schema" shape. */
+type NameBody = { name: string };
+const nameBody = {
+  "~standard": {
+    version: 1 as const,
+    vendor: "gamenite",
+    validate: (value: unknown): { value: NameBody } | { issues: { message: string }[] } => {
+      const name = (value as { name?: unknown } | null)?.name;
+      return typeof name === "string" ? { value: { name } } : { issues: [{ message: "name must be text" }] };
+    },
+    /** Type-only: what the validator accepts and produces. */
+    types: undefined as unknown as { input: unknown; output: NameBody },
+  },
+};
+
 export const walletEndpoints = {
-  /** GET /me: my player code (which opens my lounge) and whether I am a guest. */
+  /** GET /me: my player code (which opens my lounge), whether I am a guest, and my name. */
   me: createEndpoint(ME_ROUTE, { method: "GET" }, async (ctx): Promise<MeSnapshot> => {
     const player = await playerFromHeader(ctx.getHeader("authorization"));
     if (!player) throw ctx.error("UNAUTHORIZED", { message: "sign in first" });
-    await getLedger().ensureProfile(player.userId, "", player.guest);
-    return { playerCode: await getLedger().playerCode(player.userId), guest: player.guest };
+    return me(player);
+  }),
+
+  /** POST /me { name }: change my display name (2 to 16 printable characters). */
+  setName: createEndpoint(ME_ROUTE, { method: "POST", body: nameBody }, async (ctx): Promise<MeSnapshot> => {
+    const player = await playerFromHeader(ctx.getHeader("authorization"));
+    if (!player) throw ctx.error("UNAUTHORIZED", { message: "sign in first" });
+    await me(player);
+    try {
+      await getLedger().setDisplayName(player.userId, ctx.body.name);
+    } catch (error) {
+      if (error instanceof LedgerError) throw ctx.error("BAD_REQUEST", { message: error.message });
+      throw error;
+    }
+    return me(player);
   }),
 
   /** GET /wallet: balance and whether today's bonus is still available. */

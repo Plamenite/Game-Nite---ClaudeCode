@@ -27,6 +27,7 @@ import {
 import { authenticate, type PlayerAuth } from "../auth.js";
 import { isTrustedLaunch } from "../launch.js";
 import { LedgerError, getLedger } from "../ledger.js";
+import { resolveName } from "./names.js";
 import { FiveRowRun, FiveRowSeat, FiveRowState } from "./schema/FiveRowState.js";
 
 /** Unpredictable dealing: never Math.random on the server. randomInt's range must stay below 2^48. */
@@ -116,7 +117,7 @@ export class FiveRowRoom extends Room<{ state: FiveRowState; metadata: { players
 
   async onJoin(client: Client, options: FiveRowJoinOptions | undefined) {
     const auth = client.auth as PlayerAuth;
-    const name = sanitizeDisplayName(options?.name);
+    const name = await resolveName(auth, options?.name);
     // Look before charging: never take coins from someone who cannot sit.
     if (!this.hasSeatFor(options)) throw new ServerError(409, "No free seat at this table right now.");
     await this.chargeSeat(auth, name);

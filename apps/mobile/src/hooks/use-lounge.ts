@@ -16,7 +16,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getClient } from '@/lib/colyseus';
-import { guest } from '@/lib/guest';
+import { getSession, patchSession } from '@/lib/session';
 
 /**
  * idle        not connected to any lounge
@@ -83,8 +83,15 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
   /** Who am I, according to the server (my player code opens my lounge). */
   const whoAmI = useCallback(async (): Promise<MeSnapshot> => {
     if (me) return me;
+    const session = getSession();
+    if (session.playerCode) {
+      const known = { playerCode: session.playerCode, guest: session.guest, name: session.name };
+      setMe(known);
+      return known;
+    }
     const response = await getClient().http.get(ME_ROUTE);
     const snap = response.data as MeSnapshot;
+    patchSession({ name: snap.name, playerCode: snap.playerCode });
     setMe(snap);
     return snap;
   }, [me]);
@@ -96,7 +103,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
     setError(null);
     try {
       const { playerCode } = await whoAmI();
-      const room = await getClient().joinOrCreate<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(guest.name, playerCode));
+      const room = await getClient().joinOrCreate<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(getSession().name, playerCode));
       attach(room);
     } catch (e) {
       setStatus('error');
@@ -125,7 +132,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
       setError(null);
       setSnapshot(null);
       try {
-        const room = await getClient().join<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(guest.name, code));
+        const room = await getClient().join<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(getSession().name, code));
         attach(room);
       } catch (e) {
         setStatus('error');

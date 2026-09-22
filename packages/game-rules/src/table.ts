@@ -8,9 +8,14 @@ export const ROOMS = {
   courtpiece: 'courtpiece',
 } as const;
 
-/** Keep display names short and printable. Empty input becomes "Guest". */
-export function sanitizeDisplayName(input: unknown, maxLength = 16): string {
+/** Keep display names short and printable. Empty input becomes the fallback ("Guest"). */
+export function sanitizeDisplayName(input: unknown, maxLength = 16, fallback = 'Guest'): string {
   const text = typeof input === 'string' ? input : '';
-  const cleaned = text.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, maxLength);
-  return cleaned.length > 0 ? cleaned : 'Guest';
+  const cleaned = text.replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, maxLength).trim();
+  return cleaned.length > 0 ? cleaned : fallback;
+}
+
+/** DECIDED: a guest (or an account with no name) starts as "Player 12345". */
+export function randomPlayerName(random: () => number = Math.random): string {
+  return `Player ${String(Math.floor(random() * 100000)).padStart(5, '0')}`;
 }

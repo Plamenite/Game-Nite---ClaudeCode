@@ -108,12 +108,25 @@ $$;
 -- All are SECURITY DEFINER and meant to be called by the server's service
 -- role. Each raises a clear error when a rule is broken.
 
--- First sight of a user: create the profile and grant the starting coins once.
+-- Display names: printable, at most 16 characters. Empty becomes null.
+create or replace function public.clean_display_name(p_name text) returns text
+language sql immutable as $$
+  select nullif(trim(left(regexp_replace(regexp_replace(coalesce(p_name, ''), '[^\w \-]', '', 'g'), '\s+', ' ', 'g'), 16)), '');
+$$;
+
+-- DECIDED: a guest, or an account whose login carries no name, starts as "Player 12345".
+create or replace function public.random_player_name() returns text
+language sql volatile as $$
+  select 'Player ' || lpad(floor(random() * 100000)::int::text, 5, '0');
+$$;
+
+-- First sight of a user: create the profile (name imported from the login
+-- account, or a random player number) and grant the starting coins once.
 create or replace function public.ensure_profile(p_user uuid, p_display_name text, p_is_guest boolean)
 returns bigint language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id, player_code, display_name, is_guest)
-  values (p_user, public.new_player_code(), coalesce(nullif(trim(p_display_name), ''), 'Guest'), p_is_guest)
+  values (p_user, public.new_player_code(), coalesce(public.clean_display_name(p_display_name), public.random_player_name()), p_is_guest)
   on conflict (id) do nothing;
 
   insert into public.coin_ledger (user_id, amount, kind, idempotency_key)
@@ -121,6 +134,22 @@ begin
   on conflict (idempotency_key) do nothing;
 
   return public.get_balance(p_user);
+end $$;
+
+-- Players may change their display name (2 to 16 printable characters).
+create or replace function public.set_display_name(p_user uuid, p_name text)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  clean text := public.clean_display_name(p_name);
+begin
+  if clean is null or length(clean) < 2 then
+    raise exception 'a name needs at least 2 letters or digits' using errcode = 'P0001';
+  end if;
+  update public.profiles set display_name = clean where id = p_user;
+  if not found then
+    raise exception 'no profile for this player' using errcode = 'P0001';
+  end if;
+  return clean;
 end $$;
 
 -- Login streak: 200 on day 1, +50 per consecutive UTC day, 500 from day 7

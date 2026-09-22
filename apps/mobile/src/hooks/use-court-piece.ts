@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getClient } from '@/lib/colyseus';
-import { guest } from '@/lib/guest';
+import { getSession } from '@/lib/session';
 
 export type CourtPieceStatus = 'idle' | 'connecting' | 'seated' | 'left' | 'error';
 
@@ -70,7 +70,7 @@ export function useCourtPiece() {
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().joinOrCreate<CourtPieceStateLike>(ROOMS.courtpiece, { variant, entry, name: guest.name });
+        const room = await getClient().joinOrCreate<CourtPieceStateLike>(ROOMS.courtpiece, { variant, entry, name: getSession().name });
         attach(room);
       } catch (e) {
         setStatus('error');

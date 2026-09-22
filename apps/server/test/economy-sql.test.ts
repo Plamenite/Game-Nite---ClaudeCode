@@ -47,7 +47,13 @@ describe("economy SQL (embedded Postgres)", function () {
     assert.match(p.player_code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
     assert.strictEqual(p.is_guest, false);
     await db.query("select public.ensure_profile($1, $2, $3)", [U2, "", true]);
-    assert.strictEqual((await db.query<{ d: string }>("select display_name as d from public.profiles where id = $1", [U2])).rows[0].d, "Guest");
+    const guestName = (await db.query<{ d: string }>("select display_name as d from public.profiles where id = $1", [U2])).rows[0].d;
+    assert.match(guestName, /^Player \d{5}$/, "a guest starts as a random player number");
+
+    // Names can be changed, within reason.
+    assert.strictEqual((await db.query<{ n: string }>("select public.set_display_name($1, $2) as n", [U2, "  Ali   Khan!! "])).rows[0].n, "Ali Khan");
+    await rejects(db.query("select public.set_display_name($1, $2)", [U2, " x "]), /at least 2/);
+    assert.strictEqual((await db.query<{ d: string }>("select display_name as d from public.profiles where id = $1", [U2])).rows[0].d, "Ali Khan");
   });
 
   it("the daily bonus can be claimed once per day", async () => {

@@ -16,13 +16,13 @@ import {
   isTableEntry,
   isTeamGame,
   normalizeLoungeCode,
-  sanitizeDisplayName,
   seatsForLounge,
   type LoungeGameChoice,
 } from "@gamenite/game-rules";
-import { authenticate } from "../auth.js";
+import { authenticate, type PlayerAuth } from "../auth.js";
 import { LAUNCH_SECRET } from "../launch.js";
 import { getLedger } from "../ledger.js";
+import { resolveName } from "./names.js";
 import { LoungeMember, LoungeRequest, LoungeState } from "./schema/LoungeState.js";
 
 /** How long a knock waits; tests shorten it with LOUNGE_KNOCK_SECONDS. */
@@ -151,13 +151,13 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
   }
 
   async onJoin(client: Client, options: LoungeJoinOptions) {
-    const userId = client.auth?.userId ?? "";
-    const name = sanitizeDisplayName(options?.name);
+    const auth = client.auth as PlayerAuth;
+    const userId = auth.userId;
     if (normalizeLoungeCode(options?.[LOUNGE_JOIN_FILTER_KEY]) !== this.state.code) {
       throw new ServerError(403, "wrong lounge code");
     }
-    // Make sure the player has a wallet (and the one-time starting coins).
-    await getLedger().ensureProfile(userId, name, client.auth?.guest ?? true);
+    // First sight creates the profile (wallet, starting coins, name).
+    const name = await resolveName(auth, options?.name);
     const isOwner = (await getLedger().playerCode(userId)) === this.state.code;
 
     if (this.state.members.size === 0 && !isOwner) {

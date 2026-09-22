@@ -15,3 +15,13 @@ test('sanitizeDisplayName strips junk, trims, limits length, and falls back', ()
   assert.equal(sanitizeDisplayName(42), 'Guest');
   assert.equal(sanitizeDisplayName('Ali Raza_1'), 'Ali Raza_1');
 });
+
+test('empty names fall back, and a guest gets a random player number', async () => {
+  const { randomPlayerName, sanitizeDisplayName } = await import('../src/table.js');
+  assert.equal(sanitizeDisplayName('', 16, ''), '');
+  assert.equal(sanitizeDisplayName('  Zain   Ahmed  '), 'Zain Ahmed');
+  assert.equal(sanitizeDisplayName('x'.repeat(40)).length, 16);
+  assert.match(randomPlayerName(), /^Player \d{5}$/);
+  assert.equal(randomPlayerName(() => 0), 'Player 00000');
+  assert.equal(randomPlayerName(() => 0.999999), 'Player 99999');
+});

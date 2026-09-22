@@ -6,6 +6,8 @@ import {
   dailyBonusStatus,
   generateLoungeCode,
   isTableEntry,
+  randomPlayerName,
+  sanitizeDisplayName,
   utcDay,
   type DailyBonusStatus,
   type LedgerMove,
@@ -24,6 +26,9 @@ export interface Ledger {
   getBalance(userId: string): Promise<number>;
   /** The 8-character code friends add you with; it also opens your lounge. */
   playerCode(userId: string): Promise<string>;
+  /** The name other players see. Set at first sight (login account, or "Player 12345"), changeable. */
+  displayName(userId: string): Promise<string>;
+  setDisplayName(userId: string, name: string): Promise<string>;
   /** Where today's login streak stands: claimed yet, which day, how many coins. */
   dailyBonus(userId: string): Promise<DailyBonusStatus>;
   /** Pays today's streak amount once per UTC day. Returns the balance. */
@@ -44,6 +49,7 @@ export class MemoryLedger implements Ledger {
   private adCounts = new Map<string, number>(); // `${user}:${day}` -> count
   private streaks = new Map<string, { lastClaimDay: string; streakDay: number }>();
   private codes = new Map<string, string>();
+  private names = new Map<string, string>();
 
   /** Tests pass a clock to walk through days. */
   constructor(private readonly clock: () => Date = () => new Date()) {}
@@ -61,9 +67,21 @@ export class MemoryLedger implements Ledger {
     return true;
   }
 
-  async ensureProfile(userId: string, _displayName: string, _isGuest: boolean): Promise<number> {
+  async ensureProfile(userId: string, displayName: string, _isGuest: boolean): Promise<number> {
+    if (!this.names.has(userId)) this.names.set(userId, sanitizeDisplayName(displayName, 16, "") || randomPlayerName());
     this.apply(userId, STARTING_COINS, `start:${userId}`);
     return this.balances.get(userId) ?? 0;
+  }
+
+  async displayName(userId: string): Promise<string> {
+    return this.names.get(userId) ?? randomPlayerName();
+  }
+
+  async setDisplayName(userId: string, name: string): Promise<string> {
+    const clean = sanitizeDisplayName(name, 16, "");
+    if (clean.length < 2) throw new LedgerError("a name needs at least 2 letters or digits");
+    this.names.set(userId, clean);
+    return clean;
   }
 
   async getBalance(userId: string): Promise<number> {
@@ -140,6 +158,14 @@ export class SupabaseLedger implements Ledger {
     const { data, error } = await this.client.from("profiles").select("player_code").eq("id", userId).single();
     if (error) throw new LedgerError(error.message);
     return String(data.player_code);
+  }
+  async displayName(userId: string) {
+    const { data, error } = await this.client.from("profiles").select("display_name").eq("id", userId).single();
+    if (error) throw new LedgerError(error.message);
+    return String(data.display_name);
+  }
+  setDisplayName(userId: string, name: string) {
+    return this.rpc<string>("set_display_name", { p_user: userId, p_name: name }).then(String);
   }
   dailyBonus(userId: string) {
     return this.rpc<{ claimed_today: boolean; streak_day: number; coins: number }>("daily_bonus_status", { p_user: userId }).then((s) => ({

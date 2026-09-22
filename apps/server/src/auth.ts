@@ -7,6 +7,23 @@ export interface PlayerAuth {
   userId: string;
   /** True for Supabase anonymous users and for development guest tokens. */
   guest: boolean;
+  /** The name on the login account (Facebook, Google, Apple), if the token carries one. */
+  name?: string;
+}
+
+/**
+ * DECIDED: a new player's display name is imported from the login account.
+ * Supabase copies the provider's profile into the token's user_metadata.
+ */
+export function nameFromClaims(claims: Record<string, unknown>): string | undefined {
+  const meta = claims.user_metadata;
+  if (!meta || typeof meta !== "object") return undefined;
+  const m = meta as Record<string, unknown>;
+  for (const key of ["full_name", "name", "preferred_username", "user_name"]) {
+    const value = m[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
 }
 
 /** A function that turns a raw token into a verified identity, or throws. */
@@ -36,7 +53,8 @@ export function createSupabaseVerifier(getKey: JWTVerifyGetKey, issuer: string):
     if (typeof payload.sub !== "string" || payload.sub.length === 0) {
       throw new Error("token has no subject");
     }
-    return { userId: payload.sub, guest: payload.is_anonymous === true };
+    const name = nameFromClaims(payload as Record<string, unknown>);
+    return { userId: payload.sub, guest: payload.is_anonymous === true, ...(name ? { name } : {}) };
   };
 }
 

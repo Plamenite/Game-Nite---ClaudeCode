@@ -504,13 +504,27 @@ describe("LoungeRoom (where friends gather)", () => {
     assert.deepStrictEqual([...table.state.seats.values()].map((s) => s.seat).sort(), [0, 1, 2]);
   });
 
-  it("/me tells a phone its player code, which is also its lounge code", async () => {
+  it("/me tells a phone its player code (its lounge code) and its name, which it can change", async () => {
     colyseus.sdk.auth.token = "guest-me";
-    const me = (await colyseus.sdk.http.get("/me")).data as { playerCode: string; guest: boolean };
-    colyseus.sdk.auth.token = "guest-TEST";
+    const me = (await colyseus.sdk.http.get("/me")).data as { playerCode: string; guest: boolean; name: string };
     assert.match(me.playerCode, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
     assert.strictEqual(me.guest, true);
     assert.strictEqual(me.playerCode, await getLedger().playerCode("guest-me"));
+    assert.match(me.name, /^Player \d{5}$/, "a guest starts as a random player number");
+
+    const renamed = (await colyseus.sdk.http.post("/me", { body: { name: "  Zain  " } })).data as { name: string };
+    assert.strictEqual(renamed.name, "Zain");
+    await assert.rejects(colyseus.sdk.http.post("/me", { body: { name: "x" } }), /at least 2/);
+    await assert.rejects(colyseus.sdk.http.post("/me", { body: {} as any }), /name must be text|400/i);
+    assert.strictEqual(((await colyseus.sdk.http.get("/me")).data as { name: string }).name, "Zain");
+
+    // A phone that sends no name wears the profile's name in the lounge.
+    const code = me.playerCode;
+    const lounge = await colyseus.createRoom<LoungeState>("lounge", { code });
+    const owner = await colyseus.connectTo(lounge, { code } as any);
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.members.get(owner.sessionId).name, "Zain");
+    colyseus.sdk.auth.token = "guest-TEST";
   });
 });
 

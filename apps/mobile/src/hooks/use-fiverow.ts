@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getClient } from '@/lib/colyseus';
-import { guest } from '@/lib/guest';
+import { getSession } from '@/lib/session';
 import { getServerUrl } from '@/lib/server-url';
 
 export type FiveRowStatus = 'idle' | 'connecting' | 'seated' | 'left' | 'error';
@@ -75,7 +75,7 @@ export function useFiveRow() {
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().joinOrCreate<FiveRowStateLike>(ROOMS.fiverow, { players, entry, name: guest.name });
+        const room = await getClient().joinOrCreate<FiveRowStateLike>(ROOMS.fiverow, { players, entry, name: getSession().name });
         attach(room);
       } catch (e) {
         setStatus('error');

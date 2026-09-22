@@ -54,7 +54,9 @@ use the tunnel command.
 
 1. In one terminal: `npm run server`. Click Allow if Windows Firewall asks.
 2. In another terminal: `npm run mobile`, then open the app on your iPhone.
-   You land in **your lounge**; your 8-character code is at the top.
+   Tap **Continue as guest** (Facebook, Google and Apple switch on once the
+   accounts exist). You land in **your lounge**; your 8-character code is at
+   the top, and the **You** tab lets you change your name.
 3. For a second player, press `w` in the mobile terminal to open the app in
    a browser tab, type your code under **Join a friend** and tap **Knock**.
 4. On the phone, tap **Let in**. Both tap **Ready**. The leader (★) picks the

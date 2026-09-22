@@ -6,6 +6,7 @@ import {
   authenticate,
   configureAuth,
   createSupabaseVerifier,
+  nameFromClaims,
   settingsFromEnv,
   type AuthSettings,
 } from "../src/auth.js";
@@ -71,6 +72,12 @@ describe("authenticate (Supabase tokens and dev guest tokens)", () => {
         userId: "11111111-2222-3333-4444-555555555555",
         guest: false,
       });
+      const named = await sign({ sub: "11111111-2222-3333-4444-555555555555", role: "authenticated", user_metadata: { full_name: "Zain Ahmed", email: "z@example.com" } });
+      assert.deepStrictEqual(await authenticate(named, {}, ctx), {
+        userId: "11111111-2222-3333-4444-555555555555",
+        guest: false,
+        name: "Zain Ahmed",
+      });
     });
 
     it("marks Supabase anonymous users as guests", async () => {
@@ -111,5 +118,14 @@ describe("authenticate (Supabase tokens and dev guest tokens)", () => {
     assert.strictEqual(settingsFromEnv({ ALLOW_GUEST_TOKENS: "true" }).allowGuestTokens, true);
     assert.strictEqual(settingsFromEnv({ ALLOW_GUEST_TOKENS: "yes" }).allowGuestTokens, false, "only the exact word true");
     assert.ok(settingsFromEnv({ SUPABASE_URL: "https://x.supabase.co" }).verifier, "JWKS verifier");
+  });
+
+  it("imports the display name from the login account's claims", () => {
+    assert.strictEqual(nameFromClaims({ user_metadata: { full_name: "  Zain Ahmed " } }), "Zain Ahmed");
+    assert.strictEqual(nameFromClaims({ user_metadata: { name: "Zain" } }), "Zain");
+    assert.strictEqual(nameFromClaims({ user_metadata: { full_name: "", preferred_username: "zain_a" } }), "zain_a");
+    assert.strictEqual(nameFromClaims({ user_metadata: { email: "zain@example.com" } }), undefined, "an email is not a name");
+    assert.strictEqual(nameFromClaims({}), undefined);
+    assert.strictEqual(nameFromClaims({ user_metadata: "junk" }), undefined);
   });
 });

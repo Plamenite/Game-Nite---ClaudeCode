@@ -12,6 +12,14 @@ describe("MemoryLedger (development ledger with the database's rules)", () => {
     assert.match(await l.playerCode("u1"), /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
     assert.strictEqual(await l.playerCode("u1"), await l.playerCode("u1"), "a player keeps one code");
     assert.notStrictEqual(await l.playerCode("u1"), await l.playerCode("u2"));
+    assert.strictEqual(await l.displayName("u1"), "Zain", "the name from the login account, set at first sight");
+    await l.ensureProfile("u1", "Somebody Else", false);
+    assert.strictEqual(await l.displayName("u1"), "Zain", "first sight only");
+    await l.ensureProfile("g1", "", true);
+    assert.match(await l.displayName("g1"), /^Player \d{5}$/, "a guest gets a random player number");
+    assert.strictEqual(await l.setDisplayName("g1", "  Ali   Khan!! "), "Ali Khan");
+    await rejects(l.setDisplayName("g1", " x "), /at least 2/);
+    assert.strictEqual(await l.displayName("g1"), "Ali Khan");
     assert.strictEqual(await l.claimDailyBonus("u1"), 1200);
     await rejects(l.claimDailyBonus("u1"), /already claimed/);
     for (let i = 1; i <= 5; i++) await l.rewardAd("u1", `ad-${i}`);
