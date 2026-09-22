@@ -34,7 +34,7 @@ test('ranking is ace high; partners sit opposite; play goes round in order', () 
   assert.deepEqual([0, 1, 2, 3].map(seatTeam), [0, 1, 0, 1]);
   assert.equal(partnerOf(1), 3);
   assert.equal(nextSeat(3), 0);
-  assert.deepEqual(COURT_PIECE_VARIANTS.map((v) => v.id), ['single_siri', 'double_siri', 'blind_rang']);
+  assert.deepEqual(COURT_PIECE_VARIANTS.map((v) => v.id), ['single_siri', 'double_siri']);
   assert.deepEqual(COURT_PIECE_PRIVATE_BEST_OF, [1, 3, 5]);
   assert.equal(COURT_PIECE_PUBLIC_BEST_OF, 1);
 });
@@ -105,7 +105,7 @@ function rigged(
   trumpSetter: number | null = null,
 ): CourtPieceMatch {
   const base = createCourtPieceMatch(3, { variant }, fixedRandom);
-  return { ...base, hands: hands.map((h) => h.slice()), trump, trumpSetter, leader: 0, current: 0 };
+  return { ...base, hands: hands.map((h) => h.slice()), trump, trumpSetter, lastTrickAfterTrump: trump !== null, leader: 0, current: 0 };
 }
 
 /** Play one full trick: each seat in turn plays the given card, starting from whoever leads. */
@@ -253,4 +253,71 @@ test('double siri: the winner of the thirteenth trick takes whatever is left', (
   assert.equal(match.heap, 0);
   assert.deepEqual(match.collected, [13, 0], 'every trick ends up with somebody');
   assert.equal(match.result, 'kot');
+});
+
+test('double siri: nothing banks before the trump exists; afterwards two in a row banks', () => {
+  // Tricks 1-3: seat 0 wins with hearts and everyone follows suit, so no trump exists.
+  // Trick 4: seat 0 leads a club; seat 1 cannot follow and cuts with a diamond, setting the trump.
+  // Trick 5: seat 1 leads a diamond and wins again: two in a row after trump, banks the pile of 5.
+  const hands: Card[][] = [
+    [c('A', 'hearts'), c('K', 'hearts'), c('Q', 'hearts'), c('2', 'clubs'), c('3', 'diamonds')],
+    [c('2', 'hearts'), c('3', 'hearts'), c('4', 'hearts'), c('A', 'diamonds'), c('K', 'diamonds')],
+    [c('5', 'hearts'), c('6', 'hearts'), c('7', 'hearts'), c('3', 'clubs'), c('4', 'diamonds')],
+    [c('8', 'hearts'), c('9', 'hearts'), c('10', 'hearts'), c('4', 'clubs'), c('5', 'diamonds')],
+  ];
+  let match = rigged('double_siri', hands);
+
+  let r = playTrick(match, [c('A', 'hearts'), c('2', 'hearts'), c('5', 'hearts'), c('8', 'hearts')]);
+  match = r.match;
+  r = playTrick(match, [c('K', 'hearts'), c('3', 'hearts'), c('6', 'hearts'), c('9', 'hearts')]);
+  match = r.match;
+  r = playTrick(match, [c('Q', 'hearts'), c('4', 'hearts'), c('7', 'hearts'), c('10', 'hearts')]);
+  match = r.match;
+  assert.equal(r.result.trick?.winner, 0, 'seat 0 has won three in a row');
+  assert.equal(match.trump, null);
+  assert.equal(r.result.collectedBy, undefined, 'no trump yet: nothing banks');
+  assert.equal(match.heap, 3);
+
+  r = playTrick(match, [c('2', 'clubs'), c('A', 'diamonds'), c('3', 'clubs'), c('4', 'clubs')]);
+  match = r.match;
+  assert.equal(match.trump, 'diamonds', 'seat 1 cut and set the trump');
+  assert.equal(match.trumpSetter, 1);
+  assert.equal(r.result.trick?.winner, 1);
+  assert.equal(match.heap, 4, 'first win after trump: not two in a row yet');
+
+  r = playTrick(match, [c('K', 'diamonds'), c('4', 'diamonds'), c('5', 'diamonds'), c('3', 'diamonds')]);
+  match = r.match;
+  assert.equal(r.result.trick?.winner, 1);
+  assert.deepEqual(r.result.collectedBy, { team: 1, count: 5 });
+  assert.deepEqual(match.collected, [0, 5]);
+  assert.equal(match.heap, 0);
+});
+
+test('double siri: two consecutive tricks both won with an ace do not bank', () => {
+  // Trump preset to spades (set by seat 0 earlier). Seat 0 wins tricks 1-4 in a row:
+  // K♥ (trick 1), A♦ (trick 2), A♣ (trick 3: ace after ace, no bank), K♠ trump (trick 4: banks).
+  const hands: Card[][] = [
+    [c('K', 'hearts'), c('A', 'diamonds'), c('A', 'clubs'), c('K', 'spades')],
+    [c('2', 'hearts'), c('2', 'diamonds'), c('2', 'clubs'), c('3', 'hearts')],
+    [c('4', 'hearts'), c('4', 'diamonds'), c('4', 'clubs'), c('5', 'hearts')],
+    [c('6', 'hearts'), c('6', 'diamonds'), c('6', 'clubs'), c('7', 'hearts')],
+  ];
+  let match = rigged('double_siri', hands, 'spades', 0);
+
+  let r = playTrick(match, [c('K', 'hearts'), c('2', 'hearts'), c('4', 'hearts'), c('6', 'hearts')]);
+  match = r.match;
+  r = playTrick(match, [c('A', 'diamonds'), c('2', 'diamonds'), c('4', 'diamonds'), c('6', 'diamonds')]);
+  match = r.match;
+  assert.equal(match.heap, 2);
+
+  r = playTrick(match, [c('A', 'clubs'), c('2', 'clubs'), c('4', 'clubs'), c('6', 'clubs')]);
+  match = r.match;
+  assert.equal(r.result.trick?.winner, 0);
+  assert.equal(r.result.collectedBy, undefined, 'ace after ace: the pile stays');
+  assert.equal(match.heap, 3);
+
+  r = playTrick(match, [c('K', 'spades'), c('3', 'hearts'), c('5', 'hearts'), c('7', 'hearts')]);
+  match = r.match;
+  assert.deepEqual(r.result.collectedBy, { team: 0, count: 4 }, 'a non-ace win after an ace win banks');
+  assert.deepEqual(match.collected, [4, 0]);
 });

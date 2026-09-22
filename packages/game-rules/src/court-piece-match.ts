@@ -12,6 +12,7 @@ import {
   COURT_PIECE_TOTAL_TRICKS,
   COURT_PIECE_TRICKS_TO_WIN,
   classifyDeal,
+  isAce,
   nextSeat,
   seatTeam,
   type CourtPieceVariant,
@@ -55,6 +56,10 @@ export interface CourtPieceMatch {
   heap: number;
   /** Double Siri: who won the previous trick, for the "two in a row" rule. */
   lastTrickWinner: number | null;
+  /** Double Siri: the card that won the previous trick (for the ace rule). */
+  lastWinningCard: Card | null;
+  /** Double Siri: whether the previous trick was won after the trump existed. */
+  lastTrickAfterTrump: boolean;
   /** Known as soon as a team reaches the target; the deal still runs to 13. */
   winner: number | null;
   /** Set when the deal finishes. */
@@ -90,6 +95,8 @@ export function createCourtPieceMatch(dealer: number, settings: CourtPieceSettin
     collected: [0, 0],
     heap: 0,
     lastTrickWinner: null,
+    lastWinningCard: null,
+    lastTrickAfterTrump: false,
     winner: null,
     result: null,
   };
@@ -162,6 +169,8 @@ export function playCard(match: CourtPieceMatch, seat: number, card: Card): Play
   const collected = collectTricks(next, trick);
   if (collected) result.collectedBy = collected;
   next.lastTrickWinner = winner;
+  next.lastWinningCard = trick.plays.find((p) => p.seat === winner)!.card;
+  next.lastTrickAfterTrump = next.trump !== null;
 
   // The deal is decided at the target, but always played out to the end.
   for (const team of [0, 1]) {
@@ -180,12 +189,15 @@ export function playCard(match: CourtPieceMatch, seat: number, card: Card): Play
 /**
  * Who gets the trick just won, per variant.
  *
- * single_siri: straight to the winner's team.
- * blind_rang: CONFIRM; behaves like single_siri until the founder answers.
- * double_siri (documented standard, CONFIRM): tricks pile in the middle.
- * The same PLAYER winning two tricks in a row collects the pile, except
- * that no collection happens after tricks 1, 2 or 12; the winner of
- * trick 13 takes whatever is left.
+ * single_siri: straight to the winner's team, every trick.
+ *   CONFIRM: tricks won before the trump exists bank immediately too.
+ *
+ * double_siri (FOUNDER, 2026-09-22): tricks pile in the middle. The same
+ * PLAYER winning two tricks in a row banks the pile, provided that:
+ *   - it is not the 1st, 2nd or 12th trick (documented rule),
+ *   - BOTH tricks were won after the trump was created (blind-trump caveat),
+ *   - the two tricks were not both won with an ace (ace-after-ace rule).
+ * Whoever wins the 13th trick takes whatever is left, no conditions.
  */
 function collectTricks(match: CourtPieceMatch, trick: CompletedTrick): { team: number; count: number } | null {
   const team = seatTeam(trick.winner);
@@ -197,10 +209,19 @@ function collectTricks(match: CourtPieceMatch, trick: CompletedTrick): { team: n
 
   match.heap += 1;
   const n = trick.number;
-  const sameWinnerTwice = match.lastTrickWinner === trick.winner;
-  const collectable = (n >= 3 && n <= 11 && sameWinnerTwice) || n === COURT_PIECE_TOTAL_TRICKS;
-  if (!collectable) return null;
+  if (n === COURT_PIECE_TOTAL_TRICKS) return bankHeap(match, team);
+  if (n < 3 || n > 11) return null;
 
+  const sameWinnerTwice = match.lastTrickWinner === trick.winner;
+  const bothAfterTrump = match.trump !== null && match.lastTrickAfterTrump;
+  const winningCard = trick.plays.find((p) => p.seat === trick.winner)!.card;
+  const aceAfterAce = match.lastWinningCard !== null && isAce(match.lastWinningCard) && isAce(winningCard);
+
+  if (!sameWinnerTwice || !bothAfterTrump || aceAfterAce) return null;
+  return bankHeap(match, team);
+}
+
+function bankHeap(match: CourtPieceMatch, team: number): { team: number; count: number } {
   const count = match.heap;
   match.collected[team] += count;
   match.heap = 0;

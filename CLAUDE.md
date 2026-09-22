@@ -19,8 +19,8 @@ iOS-first mobile multiplayer board/card game platform.
    founder picks the final). Resembles a classic board game whose name is
    TRADEMARKED (Jax/Goliath): NEVER use that name in code, UI, or store
    copy. 10x10 board, two-eyed Jacks wild, one-eyed Jacks remove a chip.
-2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game.
-   Variations required: Double Siri and Blind Rang.
+2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game. Two
+   games: Single Siri and Double Siri; "blind" first-cut trump in both.
 
 ### Social, lobby, economy
 - PUBG-style party lobby (gather, ready, launch); voice carries lobby → match.
@@ -59,8 +59,7 @@ iOS-first mobile multiplayer board/card game platform.
 - Friends (DECIDED): Gamenite's own friends list (add by player code or
   username) plus Facebook friends as an importer on top.
 - Party (DECIDED): PUBG style. Leader makes a code, friends join, all Ready, leader launches.
-- Bundle id `app.plamenite.gamenite` (iOS + Android); domain plamenite.app,
-  spelling CONFIRMED 2026-09-22. Proposed, undecided: AdMob ads, RevenueCat IAP.
+- Bundle id `app.plamenite.gamenite`; domain plamenite.app (CONFIRMED). Undecided: AdMob, RevenueCat.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
@@ -80,10 +79,11 @@ iOS-first mobile multiplayer board/card game platform.
 - Court Piece engine `game-rules/src/court-piece-*.ts`. FOUNDER'S RULES:
   nobody calls trump; the first card played off-suit sets it and that team
   "called" it; every deal runs all 13 tricks; 7 = win, 13 by the calling
-  team = kot, 13 by the other team = goon kot; private tables best of
-  1/3/5 deals, public tables 1 deal + rematch. Double siri = documented
-  pile rule (CONFIRM). Blind rang difference, kot value in a series, and
-  who leads the next deal: PENDING interview round two.
+  team = kot, 13 by the other = goon kot; private tables best of 1/3/5,
+  public 1 deal + rematch. Double siri: same player two in a row banks the
+  pile, never after tricks 1/2/12, only once trump exists, not when both
+  wins were with aces; 13th takes the rest. PENDING: single siri pre-trump
+  banking, kot value in a series, who leads the next deal, rematch flow.
 - Skeleton (done, pre-login): `PartyRoom` (create/join by code, Ready,
   leader-only launch → seat reservations in a `FiveRowRoom`). App: Play tab
   (`use-party`/`use-fiverow`), TEMPORARY guest token `src/lib/guest.ts`.

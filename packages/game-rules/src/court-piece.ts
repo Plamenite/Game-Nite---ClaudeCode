@@ -53,11 +53,13 @@ export function rankValue(card: Card): number {
 }
 
 /**
- * Variants the product supports. Ids are internal; display names are the
- * founder's. Rules for each are in court-piece-match.ts, marked with what
- * is standard and what still awaits the founder's confirmation.
+ * The two games (FOUNDER, 2026-09-22). They differ only in how tricks are
+ * banked: Single Siri banks every trick as it is won; Double Siri banks
+ * the pile only when the same player wins two tricks in a row. The
+ * "blind" first-cut trump rule above applies to BOTH; it is not a
+ * separate variant.
  */
-export type CourtPieceVariant = 'single_siri' | 'double_siri' | 'blind_rang';
+export type CourtPieceVariant = 'single_siri' | 'double_siri';
 
 export interface CourtPieceVariantInfo {
   id: CourtPieceVariant;
@@ -68,9 +70,11 @@ export interface CourtPieceVariantInfo {
 export const COURT_PIECE_VARIANTS: readonly CourtPieceVariantInfo[] = [
   { id: 'single_siri', name: 'Single Siri', summary: 'Every trick goes straight to the team that won it.' },
   { id: 'double_siri', name: 'Double Siri', summary: 'Tricks pile up in the middle until one player wins two in a row.' },
-  // CONFIRM: what makes Blind Rang different at the founder's tables. Behaves like Single Siri until then.
-  { id: 'blind_rang', name: 'Blind Rang', summary: 'Rules pending the founder\'s answer.' },
 ];
+
+export function isAce(card: Card): boolean {
+  return card.rank === 'A';
+}
 
 /** Seats 0..3 in play order (to the right). Partners sit opposite. */
 export type Seat = 0 | 1 | 2 | 3;
