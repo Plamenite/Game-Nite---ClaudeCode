@@ -1,5 +1,6 @@
-import { Room, Client, CloseCode, Delayed, ServerError, type AuthContext } from "colyseus";
-import { SKELETON_TABLE_SEATS, TABLE_MESSAGES, sanitizeDisplayName } from "@gamenite/game-rules";
+import { Room, Client, CloseCode, Delayed } from "colyseus";
+import { SKELETON_PARTY_SIZE, SKELETON_TABLE_SEATS, TABLE_MESSAGES, sanitizeDisplayName } from "@gamenite/game-rules";
+import { authenticate } from "../auth.js";
 import { TableState, Player } from "./schema/TableState.js";
 
 /** How long a player has to act before their turn is skipped. */
@@ -8,6 +9,11 @@ const TURN_DURATION = 15_000;
 /** What the phone sends when it joins. */
 export interface TableJoinOptions {
   name?: string;
+}
+
+/** What creates a table (a party launch, or quick play with no options). */
+export interface TableCreateOptions {
+  seats?: number;
 }
 
 /**
@@ -36,7 +42,12 @@ export class TableRoom extends Room<{ state: TableState }> {
     },
   };
 
-  onCreate(_options: unknown) {
+  static onAuth = authenticate;
+
+  onCreate(options: TableCreateOptions | undefined) {
+    const requested = Number(options?.seats ?? SKELETON_TABLE_SEATS);
+    // Clamp so a bad request can never make a 1-seat or 1000-seat table.
+    this.maxClients = Math.min(SKELETON_PARTY_SIZE, Math.max(SKELETON_TABLE_SEATS, requested || SKELETON_TABLE_SEATS));
   }
 
   onJoin(client: Client, options: TableJoinOptions) {
@@ -96,21 +107,5 @@ export class TableRoom extends Room<{ state: TableState }> {
 
   onReconnect(client: Client) {
     console.log(client.sessionId, "reconnected!");
-  }
-
-  /**
-   * Runs at matchmaking time, before a seat is taken and before onJoin().
-   * Throwing rejects the join; the return value becomes `client.auth`.
-   *
-   * WALKING SKELETON: the app sends a temporary guest token. Once Supabase
-   * login exists, this verifies a Supabase JWT instead and rejects guests.
-   */
-  static async onAuth(token: string, _options: unknown, _context: AuthContext) {
-    if (!token) {
-      throw new ServerError(401, "missing auth token");
-    }
-
-    // TODO(supabase): verify the token as a Supabase JWT and return its user id.
-    return { userId: token };
   }
 }

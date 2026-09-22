@@ -1,4 +1,4 @@
-import { Client, type Room } from '@colyseus/sdk';
+import { type Room, type SeatReservation } from '@colyseus/sdk';
 import {
   ROOMS,
   TABLE_MESSAGES,
@@ -8,6 +8,7 @@ import {
 } from '@gamenite/game-rules';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { getClient } from '@/lib/colyseus';
 import { guest } from '@/lib/guest';
 import { getServerUrl } from '@/lib/server-url';
 
@@ -38,6 +39,24 @@ export function useTable() {
     setSessionId(null);
   }, []);
 
+  const attach = useCallback((room: Room<any, TableStateLike>) => {
+    roomRef.current = room;
+    setSessionId(room.sessionId);
+    setStatus('seated');
+
+    room.onStateChange((state) => setSnapshot(toTableSnapshot(state)));
+    room.onError((code, message) => setError(`Server error ${code}: ${message ?? ''}`));
+    room.onLeave(() => {
+      if (roomRef.current === room) {
+        roomRef.current = null;
+        setStatus('left');
+        setSnapshot(null);
+        setSessionId(null);
+      }
+    });
+  }, []);
+
+  /** Quick play: sit at any open table, or open a new one. */
   const join = useCallback(async () => {
     if (roomRef.current) {
       return;
@@ -45,29 +64,32 @@ export function useTable() {
     setStatus('connecting');
     setError(null);
     try {
-      const client = new Client(serverUrl);
-      client.auth.token = guest.token;
-
-      const room = await client.joinOrCreate<TableStateLike>(ROOMS.table, { name: guest.name });
-      roomRef.current = room;
-      setSessionId(room.sessionId);
-      setStatus('seated');
-
-      room.onStateChange((state) => setSnapshot(toTableSnapshot(state)));
-      room.onError((code, message) => setError(`Server error ${code}: ${message ?? ''}`));
-      room.onLeave(() => {
-        if (roomRef.current === room) {
-          roomRef.current = null;
-          setStatus('left');
-          setSnapshot(null);
-          setSessionId(null);
-        }
-      });
+      const room = await getClient().joinOrCreate<TableStateLike>(ROOMS.table, { name: guest.name });
+      attach(room);
     } catch (e) {
       setStatus('error');
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [serverUrl]);
+  }, [attach]);
+
+  /** Party launch: take the seat the party room reserved for us. */
+  const joinWithReservation = useCallback(
+    async (reservation: SeatReservation) => {
+      if (roomRef.current) {
+        return;
+      }
+      setStatus('connecting');
+      setError(null);
+      try {
+        const room = await getClient().consumeSeatReservation<TableStateLike>(reservation);
+        attach(room);
+      } catch (e) {
+        setStatus('error');
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [attach],
+  );
 
   const play = useCallback(() => {
     roomRef.current?.send(TABLE_MESSAGES.play, {});
@@ -81,5 +103,5 @@ export function useTable() {
     };
   }, []);
 
-  return { status, snapshot, error, sessionId, serverUrl, join, leave, play };
+  return { status, snapshot, error, sessionId, serverUrl, join, joinWithReservation, leave, play };
 }

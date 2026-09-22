@@ -9,14 +9,15 @@
   and cons, recommend one, and wait for the founder's reply.
 - Go step by step. One small, verifiable step at a time.
 - Terminal commands: list them in order, explain what each one does.
+- The founder prefers to only talk to Claude: do everything possible in
+  the repo/cloud; keep their local steps to one paste plus clicking Yes.
 
 ## 2. What Gamenite is
 iOS-first mobile multiplayer board/card game platform.
 
 ### Games
-1. **Sequence** — 10x10 board grid. Two-eyed Jacks are wild (place a chip
-   anywhere). One-eyed Jacks are anti-wild (remove an opponent's chip).
-   Win by completing sequences of 5 chips in a row.
+1. **Sequence** — 10x10 board. Two-eyed Jacks are wild (place a chip
+   anywhere); one-eyed Jacks remove an opponent's chip. Five in a row wins.
 2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game.
    Variations required: Double Siri and Blind Rang.
 
@@ -36,8 +37,7 @@ iOS-first mobile multiplayer board/card game platform.
 - Position and document the product as a **casual social game**, not
   gambling. Never use casino/gambling language in code, UI, or store copy.
 - Virtual currency can never be cashed out, transferred for value, or
-  exchanged for real money or prizes. Design every economy feature so
-  this stays true.
+  exchanged for money or prizes. Design every economy feature for this.
 - Ads and IAP must follow Apple guidelines (StoreKit, ATT prompt, etc.).
 
 ## 4. iOS-first engineering rule (strict)
@@ -49,48 +49,51 @@ iOS-first mobile multiplayer board/card game platform.
   but never a reason to compromise the iOS build.
 
 ## 5. Tech stack — DECIDED with the founder on 2026-09-22
-- Frontend framework: **React Native + Expo (TypeScript)** — DECIDED.
-  Reason: one codebase for iOS now and Android soon; Expo EAS builds iOS
-  in the cloud so the founder can work from Windows.
-- Real-time game server: **Colyseus (TypeScript)** — DECIDED. Server is
-  authoritative: it deals, hides hands, validates moves, syncs state.
-- Voice chat: **Agora** — DECIDED. Cost rule: Agora bills every minute a
-  user is connected, muted or not (~$0.99/1k min after 10k free/month).
-  So: voice is opt-in, auto-leave when idle/backgrounded, and heavy voice
-  use must be paid for by ads/VIP. Wrap the SDK behind our own
-  VoiceService interface so the provider can be swapped later.
-- Auth / database / storage: **Supabase** — DECIDED. Postgres + Auth
-  (Sign in with Apple, Google, phone) + Storage. The coin ledger is SQL:
-  one row per coin movement, written ONLY by the server, never the app.
-- Voice policy (Shape A, agreed): voice OFF by default and opt-in; small
-  free daily allowance per player; VIP subscription = unlimited; extra
-  minutes buyable with coins; server meters every player's minutes.
+- Frontend: **React Native + Expo (TypeScript)**. One codebase for iOS
+  now and Android soon; EAS builds iOS in the cloud (founder is on Windows).
+- Game server: **Colyseus (TypeScript)**, authoritative: it deals, hides
+  hands, validates moves, syncs state.
+- Voice: **Agora**, billed per connected user-minute, muted or not
+  (~$0.99/1k min after 10k free/month). Policy (Shape A, agreed): voice
+  OFF by default/opt-in, auto-leave when idle/backgrounded, small free
+  daily allowance, VIP = unlimited, extra minutes for coins, server meters
+  minutes. Wrap the SDK in our own VoiceService so it can be swapped.
+- Auth/DB/storage: **Supabase** (Postgres + Auth + Storage). Coin ledger
+  is SQL: one row per coin movement, written ONLY by the server.
+- Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Sign in
+  with Apple (required by Apple when any social login exists), Google,
+  Facebook (needs a Meta developer app + data-deletion URL).
+- Party (DECIDED): PUBG style. Leader creates a party with a join code,
+  friends join by code, each taps Ready, ONLY the leader launches.
 - Proposed, not yet decided: AdMob for ads, RevenueCat for IAP/VIP.
-- Bundle identifier: `app.plamenite.gamenite` (iOS + Android). Founder
-  typed the domain as "plamentie.app"; spelling MUST be confirmed before
-  the app is first registered with Apple, after which it is permanent.
+- Bundle id `app.plamenite.gamenite` (iOS + Android); domain plamenite.app,
+  spelling CONFIRMED by founder 2026-09-22.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
-  `packages/game-rules` shared TS rules used by BOTH (ES module).
+  `packages/game-rules` shared TS contracts + rules used by BOTH (ESM).
 - Dev resolves the shared package to SOURCE via tsconfig `paths` (server:
-  tsx watch; app: Metro + `metro.config.js` maps `.js` imports to `.ts`
-  and stubs the Node-only `ws` package for the Colyseus client SDK).
-  Prod server build uses `dist/`, built by root `postinstall`.
+  tsx watch; app: Metro + `metro.config.js`, which maps `.js` imports to
+  `.ts` and stubs Node-only `ws`). Prod server build uses `dist/`, built
+  by root `postinstall`.
 - `apps/mobile/expo-env.d.ts` is committed on purpose so `tsc` works on a
   fresh clone. Expo regenerates identical content; never edit it.
-- Root commands: `npm run mobile`, `npm run server`, `npm test`,
-  `npm run typecheck`. Windows setup: `scripts/setup-windows.ps1`.
+- Root: `npm run mobile|server|test|typecheck`. Windows setup:
+  `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1` skips VS Code, clears cache).
 - Game rules are NOT implemented yet: only card primitives, the game
   catalogue, and fixed facts (Jack eyes, player counts). Spec with founder.
-- Walking skeleton status: `TableRoom` (server) passes a turn around; the
-  app's Table tab joins it via `useTable` with a TEMPORARY guest token
-  (`src/lib/guest.ts`). Contract lives in `game-rules/src/table.ts`.
-  Next: Supabase login replaces the guest token, then the party lobby.
+- Walking skeleton (done, pre-login): `PartyRoom` (create/join by code,
+  Ready, leader-only launch → reserves seats in a `TableRoom` that passes
+  a turn around). App: Play tab via `use-party`/`use-table`; TEMPORARY
+  guest token in `src/lib/guest.ts`. Contracts: `game-rules/src/party.ts`
+  and `table.ts`. Next: Supabase login replaces the guest token.
+- Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches
+  `metadata.code` (driver checks top-level fields then metadata, plain
+  keys only, no dot notation). All room tests share ONE booted test server
+  in `test/rooms.test.ts`; a second boot per file breaks matchmaking.
 
 ## 7. Project conventions
-- Founder's machines: Windows PC daily; a ~2024 MacBook Air is available
-  when Xcode is truly needed (simulator, native debugging).
+- Founder: Windows PC (low disk space) daily; ~2024 MacBook Air for Xcode.
 - Branch for current work: `claude/modest-gates-unuglw`.
 - Commit small and often with clear, plain-English messages.
 - Keep this file under 100 lines. Update it when decisions are made.

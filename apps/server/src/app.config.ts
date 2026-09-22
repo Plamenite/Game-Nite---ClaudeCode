@@ -11,8 +11,9 @@ import {
 /**
  * Import your Room files
  */
-import { GAMES, ROOMS } from "@gamenite/game-rules";
+import { GAMES, PARTY_JOIN_FILTER_KEY, ROOMS } from "@gamenite/game-rules";
 import { TableRoom } from "./rooms/TableRoom.js";
+import { PartyRoom } from "./rooms/PartyRoom.js";
 
 const server = defineServer({
 
@@ -21,6 +22,10 @@ const server = defineServer({
    */
   rooms: {
     [ROOMS.table]: defineRoom(TableRoom).enableRealtimeListing(),
+    // Friends join with partyJoinOptions(name, code). The matchmaker forwards
+    // the "code" option and its driver matches it against the room's
+    // metadata.code, which PartyRoom sets in onCreate.
+    [ROOMS.party]: defineRoom(PartyRoom).filterBy([PARTY_JOIN_FILTER_KEY]),
     lobby: defineRoom(LobbyRoom),
   },
 

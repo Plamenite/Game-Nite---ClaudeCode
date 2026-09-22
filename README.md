@@ -43,15 +43,25 @@ Phone and PC must be on the same Wi-Fi for `npm run mobile`. If the phone
 cannot connect, Windows Firewall is usually blocking Node.js; allow it, or
 use the tunnel command.
 
-## Try the walking skeleton (phone talks to server)
+## Try the walking skeleton (party → table, phone talks to server)
 
 1. In one terminal: `npm run server`. Click Allow if Windows Firewall asks.
 2. In another terminal: `npm run mobile`, then open the app on your iPhone.
-3. Open the **Table** tab and tap **Join a table**.
+3. Open the **Play** tab and tap **Create a party**. A 6-character code
+   appears.
 4. For a second player, press `w` in the mobile terminal to open the app in
-   a browser tab, go to Table there, and join too.
-5. The table fills, the turn starts, and tapping **Tap to play** passes the
-   turn between the two players. The server decides whose turn it is.
+   a browser tab, go to Play, type the code, and tap **Join party**.
+5. Both tap **Ready**. The leader (★) taps **Launch**. Everyone lands at the
+   same table and **Tap to play** passes the turn around. The server
+   decides whose turn it is; tapping out of turn does nothing.
+
+**Quick play** skips the party and seats you at any open table.
+
+Low on disk space? Use slim setup: it skips VS Code and clears the npm cache.
+
+```powershell
+$env:GAMENITE_SLIM = '1'; irm https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/scripts/setup-windows.ps1 | iex
+```
 
 ## Tech stack
 

@@ -10,6 +10,7 @@
 /** Room names registered on the server. */
 export const ROOMS = {
   table: 'table',
+  party: 'party',
 } as const;
 
 /** Messages the phone can send to a table room. */

@@ -11,10 +11,16 @@
 #  Run it by pasting this ONE line into PowerShell and pressing Enter:
 #    irm https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/scripts/setup-windows.ps1 | iex
 #
+#  LOW ON DISK SPACE? Set $env:GAMENITE_SLIM = '1' first (same window):
+#    $env:GAMENITE_SLIM = '1'; irm https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/scripts/setup-windows.ps1 | iex
+#  Slim mode skips VS Code (~400 MB) and clears the npm download cache
+#  after installing (~800 MB). Everything else is identical.
+#
 #  It is safe to run more than once. Steps already done are skipped.
 # ============================================================================
 
 $ErrorActionPreference = 'Stop'
+$Slim    = ($env:GAMENITE_SLIM -eq '1')
 $Branch  = 'claude/modest-gates-unuglw'
 $RepoUrl = 'https://github.com/Plamenite/Game-Nite---ClaudeCode.git'
 $Target  = Join-Path $HOME 'Documents\gamenite'
@@ -55,7 +61,9 @@ Ok "winget found."
 
 Install-IfMissing 'git'  'Git.Git'                   'Git'
 Install-IfMissing 'node' 'OpenJS.NodeJS.LTS'         'Node.js LTS'
-Install-IfMissing 'code' 'Microsoft.VisualStudioCode' 'VS Code'
+if ($Slim) { Warn "Slim mode: skipping VS Code." } else {
+  Install-IfMissing 'code' 'Microsoft.VisualStudioCode' 'VS Code'
+}
 
 Step "Allowing npm helper scripts to run in PowerShell"
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
@@ -100,6 +108,16 @@ try {
   Pop-Location
 }
 Ok "Done."
+
+if ($Slim) {
+  Step "Slim mode: clearing the npm download cache to free disk space"
+  npm cache clean --force 2>$null | Out-Host
+  Ok "Done."
+}
+
+Step "Disk space used by the project"
+$bytes = (Get-ChildItem -LiteralPath $Target -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+Ok ("{0:N0} MB in {1}" -f ($bytes / 1MB), $Target)
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
