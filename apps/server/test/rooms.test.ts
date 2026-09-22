@@ -206,6 +206,8 @@ describe("FiveRowRoom (a live game)", () => {
       // Nobody moves. Turns alternate by auto-play: Zain times out at 0.25s, Friend at 0.5s, ...
       await waitFor(() => room.state.chips.some((c) => c !== NO_CHIP), 3000, "an automatic move");
       await waitFor(() => room.state.phase === "finished", 6000, "abandonment");
+      // The phone's copy arrives a moment after the server's state changes.
+      await waitFor(() => c2.state.phase === "finished", 3000, "abandonment on the phone");
 
       const snap = toFiveRowSnapshot(c2.state);
       assert.strictEqual(snap.phase, "finished");
@@ -228,6 +230,7 @@ describe("FiveRowRoom (a live game)", () => {
     await waitFor(() => room.state.phase === "finished", 3000, "forfeit");
     await room.waitForNextPatch().catch(() => {});
     assert.strictEqual(room.state.winnerTeam, 1);
+    await waitFor(() => c2.state.phase === "finished", 3000, "forfeit on the phone");
     assert.strictEqual(toFiveRowSnapshot(c2.state).seats.find((s) => s.name === "Zain")?.abandoned, true);
   });
 
@@ -341,7 +344,7 @@ describe("LoungeRoom (where friends gather)", () => {
     ali.send("kick", { sessionId: sara.sessionId });
     assert.strictEqual(await saraClosed, LOUNGE_LEAVE_CODES.kicked);
     await waitFor(() => lounge.state.members.size === 2, 3000, "Sara gone");
-    await lounge.waitForNextPatch();
+    await waitFor(() => toLoungeSnapshot(leader.state).members.length === 2, 3000, "Sara gone on the phone");
     assert.deepStrictEqual(toLoungeSnapshot(leader.state).members.map((m) => m.name), ["Zain", "Ali"]);
   });
 
@@ -704,6 +707,7 @@ describe("CourtPieceRoom (a live game)", () => {
       const { clients } = await seatFour(room);
       await waitFor(() => room.state.tricksPlayed >= 1, 4000, "an automatic trick");
       await waitFor(() => room.state.phase === "finished", 8000, "forfeit");
+      await waitFor(() => clients[0].state.phase === "finished", 3000, "forfeit on the phone");
       const snap = toCourtPieceSnapshot(clients[0].state);
       assert.strictEqual(snap.dealResult, "forfeit");
       assert.ok(snap.seriesWinner === 0 || snap.seriesWinner === 1);
