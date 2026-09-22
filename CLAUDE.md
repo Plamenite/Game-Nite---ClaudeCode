@@ -9,8 +9,8 @@
   and cons, recommend one, and wait for the founder's reply.
 - Go step by step. One small, verifiable step at a time.
 - Terminal commands: list them in order, explain what each one does.
-- The founder prefers to only talk to Claude: do everything possible in
-  the repo/cloud; keep their local steps to one paste plus clicking Yes.
+- Founder prefers to only talk to Claude: do all possible in repo/cloud;
+  their local steps = one paste plus clicking Yes.
 
 ## 2. What Gamenite is
 iOS-first mobile multiplayer board/card game platform.
@@ -24,11 +24,10 @@ iOS-first mobile multiplayer board/card game platform.
    Variations required: Double Siri and Blind Rang.
 
 ### Social, lobby, economy
-- Party lobby like PUBG Mobile: gather, ready up, launch. Voice chat starts
-  in the lobby and continues into the match without reconnecting.
-- Ludo Star style economy. NO blockchain, NO crypto, NO real-money payouts.
-  Coins/Gems buy table entries (e.g. 500 coins) and cosmetics. Revenue:
-  rewarded video ads, interstitial ads, App Store IAP for coins/cosmetics.
+- PUBG-style party lobby (gather, ready, launch); voice carries lobby → match.
+- Ludo Star style economy: NO blockchain/crypto/real-money payouts. Coins/
+  Gems buy table entries (e.g. 500) and cosmetics. Revenue: rewarded and
+  interstitial ads, App Store IAP for coins and cosmetics.
 
 ## 3. Apple App Store compliance (non-negotiable)
 - Position and document the product as a **casual social game**, not
@@ -42,8 +41,7 @@ iOS-first mobile multiplayer board/card game platform.
   Xcode build, iPhone screen sizes, Safe Areas, Dark Mode, TestFlight.
 - Keep the iOS build simple and App Store-ready; check every dependency
   for iOS support before adopting it.
-- Android is a confirmed second target (very important to the founder),
-  but never a reason to compromise the iOS build.
+- Android is a confirmed second target, but never a reason to compromise iOS.
 
 ## 5. Tech stack — DECIDED with the founder on 2026-09-22
 - Frontend: **React Native + Expo (TypeScript)**. One codebase for iOS
@@ -51,10 +49,9 @@ iOS-first mobile multiplayer board/card game platform.
 - Game server: **Colyseus (TS)**, authoritative: deals, hides hands,
   validates moves, syncs state.
 - Voice: **Agora**, billed per connected user-minute, muted or not
-  (~$0.99/1k min after 10k free/month). Policy (Shape A, agreed): voice
-  OFF by default/opt-in, auto-leave when idle/backgrounded, small free
-  daily allowance, VIP = unlimited, extra minutes for coins, server meters
-  minutes. Wrap the SDK in our own VoiceService so it can be swapped.
+  (~$0.99/1k min after 10k free). Policy (Shape A): voice OFF by default,
+  auto-leave when idle/backgrounded, small free daily allowance, VIP
+  unlimited, extra minutes for coins, server meters minutes. Wrap the SDK.
 - Auth/DB/storage: **Supabase** (Postgres + Auth + Storage). Coin ledger
   is SQL: one row per coin movement, written ONLY by the server.
 - Sign-in (DECIDED): Guest (Supabase anonymous, upgradeable), Sign in
@@ -72,23 +69,26 @@ iOS-first mobile multiplayer board/card game platform.
 - `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
   `packages/game-rules` shared TS contracts + rules used by BOTH (ESM).
 - Dev resolves the shared package to SOURCE via tsconfig `paths` (server:
-  tsx watch; app: Metro + `metro.config.js`, which maps `.js` imports to
-  `.ts` and stubs Node-only `ws`). Prod server build uses `dist/`, built
-  by root `postinstall`.
+  tsx watch; app: Metro + `metro.config.js` mapping `.js`→`.ts`, stubbing
+  Node-only `ws`). Prod server build uses `dist/` (root `postinstall`).
 - `apps/mobile/expo-env.d.ts` is committed so `tsc` works on a fresh clone.
 - Root: `npm run mobile|server|test|typecheck`; CI runs the last two on
   every push. Windows setup: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
 - Five Row is LIVE end to end: pure engine `game-rules/src/fiverow-*.ts`
   (own board layout, never regenerate casually), `FiveRowRoom` (hands sent
-  privately, crypto RNG, 30 s turns = PLACEHOLDER, timeout → random legal
+  privately, crypto RNG, 30 s turns (DECIDED), timeout → random legal
   move, 3 in a row → seat abandoned, last team present wins), phone board
   `components/fiverow-board.tsx`. Interview (DECIDED): tables 1v1, 3 players,
-  2v2; standard hand sizes and runs-to-win. Court Piece rules: not started.
-- Walking skeleton (done, pre-login): `PartyRoom` (create/join by code,
-  Ready, leader-only launch → seat reservations in a `FiveRowRoom`). App:
-  Play tab (`use-party`/`use-fiverow`), TEMPORARY guest token in
-  `src/lib/guest.ts`. Server verifies Supabase JWTs (`src/auth.ts`; guests
-  only with ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
+  2v2; standard hand sizes and runs-to-win.
+- Court Piece engine core in `game-rules/src/court-piece-*.ts` (5+4+4 deal,
+  caller = dealer's right, follow suit, trick winner, single/double siri
+  collection per documented rules, blind rang = first off-suit card sets
+  trump, win at 7, kot). Variants + dealer rotation await the interview.
+- Skeleton (done, pre-login): `PartyRoom` (create/join by code, Ready,
+  leader-only launch → seat reservations in a `FiveRowRoom`). App: Play tab
+  (`use-party`/`use-fiverow`), TEMPORARY guest token `src/lib/guest.ts`.
+  Server verifies Supabase JWTs (`src/auth.ts`; guests only if
+  ALLOW_GUEST_TOKENS=true). Next: app login once accounts exist.
 - Colyseus gotchas: `filterBy(['code'])` + join option `{ code }` matches
   `metadata.code` (plain keys, no dot notation). Room tests share ONE booted
   test server in `test/rooms.test.ts`; two boots per process break it.

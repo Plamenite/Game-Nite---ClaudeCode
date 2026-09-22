@@ -93,7 +93,7 @@ export function fiverowConfigForPlayers(playerCount: number): FiveRowTableConfig
   return FIVEROW_TABLE_CONFIGS.find((c) => c.players === playerCount) ?? null;
 }
 
-/** Seconds a player gets per turn. PLACEHOLDER until the founder tunes it. */
+/** Seconds a player gets per turn. DECIDED by the founder 2026-09-22. */
 export const FIVEROW_TURN_SECONDS = 30;
 
 /**
