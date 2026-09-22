@@ -22,6 +22,7 @@ import {
 import { authenticate, type PlayerAuth } from "../auth.js";
 import { LAUNCH_SECRET } from "../launch.js";
 import { getLedger } from "../ledger.js";
+import * as presence from "../presence.js";
 import { resolveName } from "./names.js";
 import { LoungeMember, LoungeRequest, LoungeState } from "./schema/LoungeState.js";
 
@@ -55,6 +56,8 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
   state = new LoungeState();
 
   private doorTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** userId per sessionId, for friendship checks and presence. */
+  private userOf = new Map<string, string>();
 
   messages = {
     [LOUNGE_MESSAGES.setReady]: async (client: Client, message: { ready?: boolean } | undefined) => {
@@ -159,6 +162,7 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     // First sight creates the profile (wallet, starting coins, name).
     const name = await resolveName(auth, options?.name);
     const isOwner = (await getLedger().playerCode(userId)) === this.state.code;
+    this.userOf.set(client.sessionId, userId);
 
     if (this.state.members.size === 0 && !isOwner) {
       throw new ServerError(403, "Only the owner can open this lounge.");
@@ -169,6 +173,12 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     }
     if (this.state.members.size >= LOUNGE_SIZE) {
       throw new ServerError(409, "The lounge is full.");
+    }
+    // DECIDED: only friends of someone inside may knock.
+    const insiders = [...this.state.members.keys()].map((sid) => this.userOf.get(sid) ?? "");
+    const friendOfSomeone = (await Promise.all(insiders.map((id) => (id ? getLedger().areFriends(userId, id) : false)))).some(Boolean);
+    if (!friendOfSomeone) {
+      throw new ServerError(403, "Add someone in this lounge as a friend first.");
     }
     // Knock and wait for a member to open the door.
     const request = new LoungeRequest();
@@ -183,6 +193,10 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
 
   onLeave(client: Client, _code: CloseCode) {
     this.forget(client.sessionId);
+    if (this.state.members.has(client.sessionId)) {
+      presence.exit(this.userOf.get(client.sessionId) ?? "", `lounge:${this.state.code}`);
+    }
+    this.userOf.delete(client.sessionId);
     this.state.members.delete(client.sessionId);
 
     if (this.state.leaderSessionId === client.sessionId) {
@@ -227,6 +241,7 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     if (!this.state.leaderSessionId || !this.state.members.has(this.state.leaderSessionId)) {
       this.state.leaderSessionId = client.sessionId;
     }
+    presence.enter(this.userOf.get(client.sessionId) ?? "", `lounge:${this.state.code}`);
     console.log("lounge", this.state.code, "+", name, this.state.leaderSessionId === client.sessionId ? "(leader)" : "");
   }
 

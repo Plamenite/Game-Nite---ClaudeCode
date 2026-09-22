@@ -141,3 +141,6 @@ left is configuration, all public values except where marked SECRET:
    browser flow through Supabase is used instead.
 6. **Facebook.** The Meta app needs the data-deletion URL and, later, review
    for the friends permission (`user_friends`). Sign-in itself needs no review.
+   DECIDED: Facebook friends are imported only when the player taps "Find
+   Facebook friends" on the Friends tab (Meta requires a visible reason
+   before the permission is asked), never automatically at sign-in.

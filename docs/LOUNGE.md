@@ -14,10 +14,12 @@ and when the game ends you are all back in the same lounge.
    player's 8-character player code, so one code adds you as a friend and
    opens your lounge. Only the owner can open an empty lounge, and the
    owner always walks straight in.
-3. **Who can walk in.** A friend knocks with the code and waits at the
-   door. Anyone already inside can let them in or turn them away; an
-   unanswered knock closes after a minute. The leader can remove people.
-   Once accounts and friends exist, only friends may knock.
+3. **Who can walk in.** Only a friend of someone already inside may knock
+   (friends are Gamenite's own list: add by player code, the other side
+   accepts). The knocker waits at the door; anyone inside can let them in
+   or turn them away; an unanswered knock closes after a minute. The leader
+   can remove people. Knock from the Friends tab when a friend shows as
+   "In their lounge", or type their code.
 4. **Starting with fewer than four.** A lounge of one, two or three may
    start a bigger table; the empty seats are filled with other players at
    the same entry (quick play lands them there). DECIDED on top of this:
@@ -52,9 +54,13 @@ seat.
 2. Fill empty seats with other players (done): the lounge creates the
    table, holds its members' seats for twenty seconds, and leaves the rest
    open; only a lounge reservation may choose a seat.
-3. Accounts and friends: friend-only knocking, online status, invites.
-4. Voice, with mute-for-me.
-5. Rewarded ads.
+3. Friends (done): own list, requests both ways, online status (in a
+   lounge, at a table, online, offline) from the server's presence store,
+   friend-only knocking, knock from the list. Facebook friends import comes
+   on tap once the Meta account exists (DECIDED: never automatically).
+4. Accounts: sign-in is coded; needs the Supabase and provider accounts.
+5. Voice, with mute-for-me.
+6. Rewarded ads.
 
 ## How it is wired
 

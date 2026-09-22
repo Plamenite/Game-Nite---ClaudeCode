@@ -20,6 +20,27 @@ import {
  *   - SupabaseLedger: production, calls the SQL functions from
  *     supabase/migrations/*_economy.sql with the service role key.
  */
+export interface FriendEntry {
+  userId: string;
+  playerCode: string;
+  name: string;
+}
+
+export interface FriendPairs {
+  friends: FriendEntry[];
+  /** They asked me. */
+  incoming: FriendEntry[];
+  /** I asked them. */
+  outgoing: FriendEntry[];
+}
+
+/** What sending a request did: asked, or a request both ways became a friendship, or nothing new. */
+export type FriendRequestOutcome = "requested" | "accepted" | "already";
+
+/**
+ * The server's one door to the database: coins, profiles and friends.
+ * Rooms and endpoints talk to this, never to the database directly.
+ */
 export interface Ledger {
   /** First sight of a player: profile plus starting coins, once. Returns the balance. */
   ensureProfile(userId: string, displayName: string, isGuest: boolean): Promise<number>;
@@ -38,6 +59,16 @@ export interface Ledger {
   chargeTableEntry(userId: string, tableId: string, entry: number): Promise<number>;
   /** Records rewards and refunds computed by settleTable(). Idempotent per table. */
   settleTable(tableId: string, moves: readonly LedgerMove[]): Promise<void>;
+
+  // ---- friends (DECIDED): add by code, the other side accepts, one row per pair.
+  userIdByCode(code: string): Promise<string | null>;
+  friendPairs(userId: string): Promise<FriendPairs>;
+  requestFriend(userId: string, friendId: string): Promise<FriendRequestOutcome>;
+  /** Accept or decline a request that came in; throws when there is none. */
+  answerFriend(userId: string, friendId: string, accept: boolean): Promise<void>;
+  /** Remove a friend, or withdraw a request. */
+  removeFriend(userId: string, friendId: string): Promise<void>;
+  areFriends(userId: string, otherId: string): Promise<boolean>;
 }
 
 export class LedgerError extends Error {}
@@ -50,6 +81,8 @@ export class MemoryLedger implements Ledger {
   private streaks = new Map<string, { lastClaimDay: string; streakDay: number }>();
   private codes = new Map<string, string>();
   private names = new Map<string, string>();
+  /** One entry per pair, keyed by the two ids in sorted order. */
+  private pairs = new Map<string, { requestedBy: string; accepted: boolean }>();
 
   /** Tests pass a clock to walk through days. */
   constructor(private readonly clock: () => Date = () => new Date()) {}
@@ -132,6 +165,62 @@ export class MemoryLedger implements Ledger {
       this.apply(m.playerId, m.amount, `${m.kind}:${tableId}:${m.playerId}`);
     }
   }
+
+  private pairKey(a: string, b: string) {
+    return [a, b].sort().join("|");
+  }
+
+  async userIdByCode(code: string): Promise<string | null> {
+    for (const [userId, c] of this.codes) if (c === code) return userId;
+    return null;
+  }
+
+  async requestFriend(userId: string, friendId: string): Promise<FriendRequestOutcome> {
+    if (userId === friendId) throw new LedgerError("that is your own code");
+    const key = this.pairKey(userId, friendId);
+    const existing = this.pairs.get(key);
+    if (!existing) {
+      this.pairs.set(key, { requestedBy: userId, accepted: false });
+      return "requested";
+    }
+    if (existing.accepted) return "already";
+    if (existing.requestedBy !== userId) {
+      existing.accepted = true; // they had asked me: a request both ways is a yes
+      return "accepted";
+    }
+    return "requested";
+  }
+
+  async answerFriend(userId: string, friendId: string, accept: boolean): Promise<void> {
+    const key = this.pairKey(userId, friendId);
+    const existing = this.pairs.get(key);
+    if (!existing || existing.accepted || existing.requestedBy === userId) throw new LedgerError("no request from them");
+    if (accept) existing.accepted = true;
+    else this.pairs.delete(key);
+  }
+
+  async removeFriend(userId: string, friendId: string): Promise<void> {
+    this.pairs.delete(this.pairKey(userId, friendId));
+  }
+
+  async areFriends(userId: string, otherId: string): Promise<boolean> {
+    return this.pairs.get(this.pairKey(userId, otherId))?.accepted === true;
+  }
+
+  async friendPairs(userId: string): Promise<FriendPairs> {
+    const lists: FriendPairs = { friends: [], incoming: [], outgoing: [] };
+    for (const [key, pair] of this.pairs) {
+      const [a, b] = key.split("|");
+      if (a !== userId && b !== userId) continue;
+      const other = a === userId ? b : a;
+      const entry: FriendEntry = { userId: other, playerCode: await this.playerCode(other), name: await this.displayName(other) };
+      if (pair.accepted) lists.friends.push(entry);
+      else if (pair.requestedBy === userId) lists.outgoing.push(entry);
+      else lists.incoming.push(entry);
+    }
+    for (const list of [lists.friends, lists.incoming, lists.outgoing]) list.sort((x, y) => x.name.localeCompare(y.name));
+    return lists;
+  }
 }
 
 /** Production ledger: every call is one SQL function in Supabase. */
@@ -188,6 +277,30 @@ export class SupabaseLedger implements Ledger {
       p_table: tableId,
       p_moves: moves.map((m) => ({ user_id: m.playerId, amount: m.amount, kind: m.kind })),
     });
+  }
+
+  async userIdByCode(code: string) {
+    const { data, error } = await this.client.from("profiles").select("id").eq("player_code", code).maybeSingle();
+    if (error) throw new LedgerError(error.message);
+    return data ? String(data.id) : null;
+  }
+  async friendPairs(userId: string): Promise<FriendPairs> {
+    type Row = { user_id: string; player_code: string; display_name: string };
+    const raw = await this.rpc<{ friends: Row[]; incoming: Row[]; outgoing: Row[] }>("friend_lists", { p_user: userId });
+    const entries = (rows: Row[] | null | undefined) => (rows ?? []).map((r) => ({ userId: r.user_id, playerCode: r.player_code, name: r.display_name }));
+    return { friends: entries(raw?.friends), incoming: entries(raw?.incoming), outgoing: entries(raw?.outgoing) };
+  }
+  requestFriend(userId: string, friendId: string) {
+    return this.rpc<FriendRequestOutcome>("request_friend", { p_user: userId, p_friend: friendId });
+  }
+  async answerFriend(userId: string, friendId: string, accept: boolean) {
+    await this.rpc<void>("answer_friend", { p_user: userId, p_friend: friendId, p_accept: accept });
+  }
+  async removeFriend(userId: string, friendId: string) {
+    await this.rpc<void>("remove_friend", { p_user: userId, p_friend: friendId });
+  }
+  areFriends(userId: string, otherId: string) {
+    return this.rpc<boolean>("are_friends", { p_user: userId, p_other: otherId }).then(Boolean);
   }
 }
 

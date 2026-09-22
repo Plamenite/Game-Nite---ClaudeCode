@@ -16,6 +16,7 @@ import { LoungeRoom } from "./rooms/LoungeRoom.js";
 import { FiveRowRoom } from "./rooms/FiveRowRoom.js";
 import { CourtPieceRoom } from "./rooms/CourtPieceRoom.js";
 import { walletEndpoints } from "./wallet.js";
+import { friendEndpoints } from "./friends.js";
 
 const server = defineServer({
 
@@ -50,8 +51,9 @@ const server = defineServer({
     api_games: createEndpoint("/api/games", { method: "GET" }, async (ctx) => {
       return { games: GAMES };
     }),
-    // Balance and daily bonus. The SDK sends the player's token as a bearer header.
+    // Balance, daily bonus, who am I, friends. The SDK sends the player's token as a bearer header.
     ...walletEndpoints,
+    ...friendEndpoints,
   }),
 
   /**

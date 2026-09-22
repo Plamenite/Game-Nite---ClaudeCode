@@ -91,6 +91,12 @@ async function openLounge(ownerToken: string, ownerName: string) {
   return { lounge, code, owner };
 }
 
+/** Two guests become friends (a request each way is a yes). */
+async function befriend(tokenA: string, tokenB: string) {
+  await getLedger().requestFriend(tokenA, tokenB);
+  await getLedger().requestFriend(tokenB, tokenA);
+}
+
 /** Knock on a lounge the way a phone does: by room name + code. */
 async function knock(code: string, token: string, name: string) {
   colyseus.sdk.auth.token = token;
@@ -101,8 +107,9 @@ async function knock(code: string, token: string, name: string) {
   }
 }
 
-/** Knock, and have someone inside open the door. */
-async function admit(lounge: any, host: any, code: string, token: string, name: string) {
+/** Befriend the host, knock, and have someone inside open the door. */
+async function admit(lounge: any, host: any, code: string, token: string, name: string, hostToken = "guest-zain") {
+  await befriend(hostToken, token);
   const guest = await knock(code, token, name);
   await lounge.waitForNextPatch();
   host.send("accept", { sessionId: guest.sessionId });
@@ -116,7 +123,7 @@ async function admit(lounge: any, host: any, code: string, token: string, name: 
 async function gather(ownerName: string, friends: string[]) {
   const { lounge, code, owner } = await openLounge(`guest-${ownerName.toLowerCase()}`, ownerName);
   const others = [];
-  for (const name of friends) others.push(await admit(lounge, owner, code, `guest-${name.toLowerCase()}`, name));
+  for (const name of friends) others.push(await admit(lounge, owner, code, `guest-${name.toLowerCase()}`, name, `guest-${ownerName.toLowerCase()}`));
   return { lounge, code, leader: owner, others };
 }
 
@@ -242,6 +249,9 @@ describe("LoungeRoom (where friends gather)", () => {
     // Another lounge is open at the same time (a real evening has many).
     const other = await openLounge("guest-someone", "Someone");
 
+    // Only friends of someone inside may knock.
+    await assert.rejects(knock(code, "guest-stranger", "Stranger"), /friend first/i);
+    await befriend("guest-zain", "guest-friend");
     const friend = await knock(code, "guest-friend", "Friend");
     await lounge.waitForNextPatch();
     assert.strictEqual(friend.roomId, lounge.roomId, "knocked on the lounge with that code");
@@ -294,6 +304,7 @@ describe("LoungeRoom (where friends gather)", () => {
     process.env.LOUNGE_KNOCK_SECONDS = "0.3";
     try {
       const { lounge, code, owner } = await openLounge("guest-zain", "Zain");
+      for (const t of ["guest-turned", "guest-ignored", "guest-fifth"]) await befriend("guest-zain", t);
       const turned = await knock(code, "guest-turned", "Turned");
       await lounge.waitForNextPatch();
       const turnedClosed = closedWith(turned);
@@ -502,6 +513,59 @@ describe("LoungeRoom (where friends gather)", () => {
     await table.waitForNextPatch();
     assert.strictEqual(table.state.seats.get(zainTable.sessionId).seat, 0);
     assert.deepStrictEqual([...table.state.seats.values()].map((s) => s.seat).sort(), [0, 1, 2]);
+  });
+
+  it("friends: add by code, the other side accepts, the list shows where each friend is", async () => {
+    const http = colyseus.sdk.http;
+    const as = (token: string) => { colyseus.sdk.auth.token = token; };
+    const meOf = async (token: string) => { as(token); return (await http.get("/me")).data as { playerCode: string }; };
+    const fa = await meOf("guest-fa");
+    const fb = await meOf("guest-fb");
+    await getLedger().setDisplayName("guest-fb", "Bilal");
+
+    as("guest-fa");
+    await assert.rejects(http.post("/friends/add", { body: { code: "ZZZZZZZZ" } }), /no player with that code/i);
+    await assert.rejects(http.post("/friends/add", { body: { code: fa.playerCode } }), /own code/i);
+    let lists = (await http.post("/friends/add", { body: { code: fb.playerCode } })).data as any;
+    assert.deepStrictEqual(lists.outgoing.map((r: any) => r.playerCode), [fb.playerCode]);
+    assert.deepStrictEqual(lists.friends, []);
+
+    as("guest-fb");
+    lists = (await http.get("/friends")).data as any;
+    assert.deepStrictEqual(lists.incoming.map((r: any) => r.playerCode), [fa.playerCode]);
+    lists = (await http.post("/friends/answer", { body: { code: fa.playerCode, accept: true } })).data as any;
+    assert.deepStrictEqual(lists.friends.map((f: any) => [f.playerCode, f.status]), [[fa.playerCode, "offline"]]);
+
+    as("guest-fa");
+    lists = (await http.get("/friends")).data as any;
+    assert.deepStrictEqual(lists.friends.map((f: any) => [f.playerCode, f.name, f.status]), [[fb.playerCode, "Bilal", "offline"]]);
+
+    // Bilal opens his lounge: Zain sees it and could knock from the list.
+    const { lounge } = await openLounge("guest-fb", "Bilal");
+    await waitFor(() => true, 30);
+    as("guest-fa");
+    lists = (await http.get("/friends")).data as any;
+    assert.deepStrictEqual(lists.friends.map((f: any) => [f.status, f.loungeCode]), [["lounge", fb.playerCode]]);
+
+    // Bilal sits at a table: "at a table" wins over the lounge underneath.
+    const table = await colyseus.createRoom<FiveRowState>("fiverow", { players: 2, entry: 0 });
+    const seat = await connectAs(table, "guest-fb", "Bilal");
+    await waitFor(() => true, 30);
+    as("guest-fa");
+    lists = (await http.get("/friends")).data as any;
+    assert.strictEqual(lists.friends[0].status, "table");
+    await seat.leave(true);
+    await waitFor(() => true, 30);
+    lists = (await http.get("/friends")).data as any;
+    assert.strictEqual(lists.friends[0].status, "lounge", "back in the lounge");
+    await lounge.disconnect();
+    await waitFor(() => true, 30);
+    lists = (await http.get("/friends")).data as any;
+    assert.strictEqual(lists.friends[0].status, "offline");
+
+    lists = (await http.post("/friends/remove", { body: { code: fb.playerCode } })).data as any;
+    assert.deepStrictEqual(lists, { friends: [], incoming: [], outgoing: [] });
+    as("guest-TEST");
   });
 
   it("/me tells a phone its player code (its lounge code) and its name, which it can change", async () => {

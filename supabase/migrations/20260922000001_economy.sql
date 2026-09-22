@@ -287,3 +287,108 @@ create policy "own balance" on public.coin_balances for select using (auth.uid()
 -- Other players' public card: name and code only, through a view.
 create or replace view public.player_cards as
   select id, player_code, display_name, avatar_url from public.profiles;
+
+-- ---------------------------------------------------------------- friends
+-- DECIDED: Gamenite's own list. One row per pair (a < b); the row is a
+-- request until accepted_at is set. Only the server writes, via the
+-- functions below; phones read their own rows at most.
+
+create table if not exists public.friendships (
+  a             uuid not null references public.profiles (id) on delete cascade,
+  b             uuid not null references public.profiles (id) on delete cascade,
+  requested_by  uuid not null,
+  accepted_at   timestamptz,
+  created_at    timestamptz not null default now(),
+  primary key (a, b),
+  check (a < b)
+);
+create index if not exists friendships_b on public.friendships (b);
+
+create or replace function public.user_id_by_code(p_code text) returns uuid
+language sql stable as $$
+  select id from public.profiles where player_code = upper(trim(p_code));
+$$;
+
+-- Ask to be friends. A request both ways is a yes. Returns 'requested', 'accepted' or 'already'.
+create or replace function public.request_friend(p_user uuid, p_friend uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  lo uuid := least(p_user, p_friend);
+  hi uuid := greatest(p_user, p_friend);
+  pair public.friendships;
+begin
+  if p_user = p_friend then
+    raise exception 'that is your own code' using errcode = 'P0001';
+  end if;
+  select * into pair from public.friendships where a = lo and b = hi for update;
+  if not found then
+    insert into public.friendships (a, b, requested_by) values (lo, hi, p_user);
+    return 'requested';
+  end if;
+  if pair.accepted_at is not null then
+    return 'already';
+  end if;
+  if pair.requested_by <> p_user then
+    update public.friendships set accepted_at = now() where a = lo and b = hi;
+    return 'accepted';
+  end if;
+  return 'requested';
+end $$;
+
+-- Accept or decline a request that came in.
+create or replace function public.answer_friend(p_user uuid, p_friend uuid, p_accept boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  lo uuid := least(p_user, p_friend);
+  hi uuid := greatest(p_user, p_friend);
+  pair public.friendships;
+begin
+  select * into pair from public.friendships where a = lo and b = hi for update;
+  if not found or pair.accepted_at is not null or pair.requested_by = p_user then
+    raise exception 'no request from them' using errcode = 'P0001';
+  end if;
+  if p_accept then
+    update public.friendships set accepted_at = now() where a = lo and b = hi;
+  else
+    delete from public.friendships where a = lo and b = hi;
+  end if;
+end $$;
+
+-- Remove a friend, or withdraw a request.
+create or replace function public.remove_friend(p_user uuid, p_friend uuid) returns void
+language sql security definer set search_path = public as $$
+  delete from public.friendships where a = least(p_user, p_friend) and b = greatest(p_user, p_friend);
+$$;
+
+create or replace function public.are_friends(p_user uuid, p_other uuid) returns boolean
+language sql stable as $$
+  select exists (
+    select 1 from public.friendships
+    where a = least(p_user, p_other) and b = greatest(p_user, p_other) and accepted_at is not null
+  );
+$$;
+
+-- {"friends": [{"user_id", "player_code", "display_name"}], "incoming": [...], "outgoing": [...]}
+create or replace function public.friend_lists(p_user uuid) returns jsonb
+language sql stable as $$
+  with pairs as (
+    select case when f.a = p_user then f.b else f.a end as other, f.requested_by, f.accepted_at
+    from public.friendships f
+    where f.a = p_user or f.b = p_user
+  ), cards as (
+    select p.id as user_id, p.player_code, p.display_name, pairs.requested_by, pairs.accepted_at
+    from pairs join public.profiles p on p.id = pairs.other
+  )
+  select jsonb_build_object(
+    'friends', coalesce((select jsonb_agg(jsonb_build_object('user_id', user_id, 'player_code', player_code, 'display_name', display_name) order by display_name)
+                         from cards where accepted_at is not null), '[]'::jsonb),
+    'incoming', coalesce((select jsonb_agg(jsonb_build_object('user_id', user_id, 'player_code', player_code, 'display_name', display_name) order by display_name)
+                          from cards where accepted_at is null and requested_by <> p_user), '[]'::jsonb),
+    'outgoing', coalesce((select jsonb_agg(jsonb_build_object('user_id', user_id, 'player_code', player_code, 'display_name', display_name) order by display_name)
+                          from cards where accepted_at is null and requested_by = p_user), '[]'::jsonb)
+  );
+$$;
+
+alter table public.friendships enable row level security;
+drop policy if exists "own friendships" on public.friendships;
+create policy "own friendships" on public.friendships for select using (auth.uid() in (a, b));

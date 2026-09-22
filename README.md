@@ -58,7 +58,10 @@ use the tunnel command.
    accounts exist). You land in **your lounge**; your 8-character code is at
    the top, and the **You** tab lets you change your name.
 3. For a second player, press `w` in the mobile terminal to open the app in
-   a browser tab, type your code under **Join a friend** and tap **Knock**.
+   a browser tab. Only friends can knock, so first befriend: in the browser's
+   **Friends** tab type the phone's code and **Send request**; on the phone,
+   **Accept**. Then in the browser tap **Knock** next to the friend (or type
+   the code under **Join a friend**).
 4. On the phone, tap **Let in**. Both tap **Ready**. The leader (★) picks the
    game and table size and taps **Start**. Everyone lands at the same Five
    Row table with seven private cards, and is back in the lounge after.

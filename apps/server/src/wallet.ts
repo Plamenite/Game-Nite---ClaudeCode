@@ -1,18 +1,8 @@
 import { createEndpoint } from "colyseus";
 import { ME_ROUTE, WALLET_ROUTES, type MeSnapshot, type WalletSnapshot } from "@gamenite/game-rules";
-import { authenticate, type PlayerAuth } from "./auth.js";
+import type { PlayerAuth } from "./auth.js";
+import { bodySchema, playerFromHeader } from "./http-auth.js";
 import { LedgerError, getLedger } from "./ledger.js";
-
-/** Verify the bearer token the SDK attaches to every http call. */
-async function playerFromHeader(header: string | null): Promise<PlayerAuth | null> {
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!token) return null;
-  try {
-    return await authenticate(token, {}, {} as never);
-  } catch {
-    return null;
-  }
-}
 
 async function snapshot(player: PlayerAuth): Promise<WalletSnapshot> {
   const ledger = getLedger();
@@ -32,20 +22,11 @@ async function me(player: PlayerAuth): Promise<MeSnapshot> {
   return { playerCode: await ledger.playerCode(player.userId), guest: player.guest, name: await ledger.displayName(player.userId) };
 }
 
-/** POST /me body: { name: string }. A tiny validator in the router's "standard schema" shape. */
-type NameBody = { name: string };
-const nameBody = {
-  "~standard": {
-    version: 1 as const,
-    vendor: "gamenite",
-    validate: (value: unknown): { value: NameBody } | { issues: { message: string }[] } => {
-      const name = (value as { name?: unknown } | null)?.name;
-      return typeof name === "string" ? { value: { name } } : { issues: [{ message: "name must be text" }] };
-    },
-    /** Type-only: what the validator accepts and produces. */
-    types: undefined as unknown as { input: unknown; output: NameBody },
-  },
-};
+/** POST /me body: { name: string }. */
+const nameBody = bodySchema((value) => {
+  const name = (value as { name?: unknown } | null)?.name;
+  return typeof name === "string" ? { name } : "name must be text";
+});
 
 export const walletEndpoints = {
   /** GET /me: my player code (which opens my lounge), whether I am a guest, and my name. */

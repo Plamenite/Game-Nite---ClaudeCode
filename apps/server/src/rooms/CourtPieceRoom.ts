@@ -32,6 +32,7 @@ import {
 import { authenticate, type PlayerAuth } from "../auth.js";
 import { isTrustedLaunch } from "../launch.js";
 import { LedgerError, getLedger } from "../ledger.js";
+import * as presence from "../presence.js";
 import { resolveName } from "./names.js";
 import { CourtPieceSeat, CourtPieceState, TrickPlay } from "./schema/CourtPieceState.js";
 
@@ -146,6 +147,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
     this.order[seatIndex] = client.sessionId;
     this.seatOf.set(client.sessionId, seatIndex);
     this.userOf.set(client.sessionId, auth.userId);
+    presence.enter(auth.userId, "table");
 
     if (this.order.every((id) => id !== undefined)) {
       this.lock();
@@ -167,6 +169,7 @@ export class CourtPieceRoom extends Room<{ state: CourtPieceState; metadata: { v
   }
 
   onLeave(client: Client, _code: CloseCode) {
+    presence.exit(this.userOf.get(client.sessionId) ?? "", "table");
     const seat = this.state.seats.get(client.sessionId);
     if (!seat) return;
     seat.connected = false;

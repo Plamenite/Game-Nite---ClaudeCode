@@ -11,9 +11,9 @@
   Claude: do all possible in repo/cloud; local = one paste + Yes.
 
 ## 2. What Gamenite is: an iOS-first mobile multiplayer board/card platform. Games:
-1. **Five Row** (id `fiverow`; display name placeholder "Jack Streak").
-   Resembles a classic board game whose name is TRADEMARKED (Jax/Goliath):
-   NEVER use it in code, UI, or store copy. 10x10 board, Jacks wild/remove.
+1. **Five Row** (id `fiverow`, placeholder name "Jack Streak"): resembles a
+   classic board game whose name is TRADEMARKED (Jax/Goliath): NEVER use it
+   in code, UI, or store copy. 10x10 board, Jacks wild/remove.
 2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game. Two
    games: Single Siri and Double Siri; "blind" first-cut trump in both.
 
@@ -45,8 +45,9 @@
 - Auth/DB/storage: **Supabase**; coin ledger is SQL, server-written ONLY. Sign-in
   (DECIDED): Facebook, Google, Apple, then guest; name from the login account,
   guests "Player 12345", changeable; guests upgrade keeping coins. `docs/ACCOUNTS.md`.
-- Friends (DECIDED): own list (add by code) + Facebook importer. Lounge
-  (DECIDED, `docs/LOUNGE.md`): PUBG style, 4 seats, first screen.
+- Friends (DECIDED, LIVE): own list, add by code, other side accepts, online
+  status; only friends of someone inside may knock. Facebook friends only on
+  tap. Lounge (DECIDED, `docs/LOUNGE.md`): PUBG style, 4 seats, first screen.
   Every player owns one; code = player code. Friends knock, anyone inside
   lets them in; leader picks game/sides/tier, removes, hands over lead; all
   Ready, leader starts; lounge survives the game. Empty seats fill with
@@ -61,10 +62,9 @@
   Prod server build uses `dist/` (root `postinstall`). `apps/mobile/expo-env.d.ts`
   is committed so `tsc` works fresh. Root: `npm run mobile|server|test|typecheck`
   (CI runs the last two). Windows: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
-- Five Row LIVE: engine `game-rules/src/fiverow-*.ts` (own board layout,
-  never regenerate), `FiveRowRoom` (private hands, crypto RNG, 30 s turns,
-  timeout → random legal move, 3 in a row → abandoned, last team present
-  wins), board `components/fiverow-board.tsx`. DECIDED: 1v1, 3p, 2v2.
+- Five Row LIVE: engine `game-rules/src/fiverow-*.ts` (own board, never
+  regenerate), `FiveRowRoom` (private hands, crypto RNG, 30 s turns, timeout →
+  random move, 3 in a row → abandoned), board `components/fiverow-board.tsx`.
 - Court Piece LIVE (ALL RULES DECIDED): engine `game-rules/src/court-piece-*.ts`,
   `CourtPieceRoom` (private hands, 30 s auto-play, forfeit when a whole team
   abandons, series + rematch), screen `components/court-piece-table.tsx`. Rules:
@@ -77,22 +77,23 @@
   best of 1/3/5, public best of 1 + rematch (all 4 agree); partners sit
   opposite. LAUNCH_SECRET lets rooms trust the lounge's seats and series length.
 - Economy LIVE: `game-rules/src/economy.ts` (settleTable, streak), SQL
-  `supabase/migrations/*_economy.sql` (append-only ledger, profiles, pglite
-  tests), server `src/ledger.ts` (memory in dev, Supabase in prod). Leader or
-  quick play picks a tier; Ready checks balance; seat charges entry (refund if
-  you leave before the table fills); end settles; rematch charges again.
-  Wallet: typed router `src/wallet.ts` (`/wallet`, `/wallet/daily`, `/me`).
-- Lounge LIVE: `game-rules/src/lounge.ts`, `LoungeRoom` (knock/accept/decline
-  with close codes, kick, make_leader, start → reservations + heldSeats, only
-  a reservation carrying LAUNCH_SECRET may pick a seat, back to open),
-  app Lounge tab `app/index.tsx` + `use-lounge`, Games tab, You tab.
+  `supabase/migrations/*_economy.sql` (append-only ledger, profiles, friends,
+  pglite tests), server `src/ledger.ts` (memory in dev, Supabase in prod).
+  Tier picked in lounge/quick play; Ready checks balance; seat charges entry
+  (refund on early leave); end settles. `src/wallet.ts`: `/wallet*`, `/me`.
+- Lounge LIVE: `game-rules/src/lounge.ts`, `LoungeRoom` (friend-gated knock,
+  accept/decline with close codes, kick, make_leader, start → reservations +
+  heldSeats, only a LAUNCH_SECRET reservation may pick a seat, back to open),
+  app Lounge tab `app/index.tsx` + `use-lounge`; Friends, Games, You tabs.
 - Sign-in code DONE, awaiting accounts: app `lib/session.ts` + `lib/auth.ts`
   (Supabase OAuth browser flow, native Apple, anonymous guests, dev guest token
   kept on the phone), gate in `app/_layout.tsx`. Server `src/auth.ts` verifies
   JWTs + name from claims (guests only if ALLOW_GUEST_TOKENS); `GET/POST /me`.
+  Friends: SQL `friendships`, ledger friend methods, `src/friends.ts` endpoints,
+  `src/presence.ts` (Colyseus presence store, TTL), app Friends tab.
 - Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`
-  (plain keys). Room tests share ONE booted test server. `client.leave(code)`
-  hits `onDrop` first: skip `allowReconnection` for your own close codes.
+  (plain keys). Room tests share ONE booted test server. `client.leave(code)` hits
+  `onDrop` first: skip `allowReconnection` for own codes. Shell: absolute paths.
 
 ## 7. Project conventions
 - Founder: Windows PC daily; MacBook Air for Xcode. Branch: `claude/modest-gates-unuglw`.

@@ -69,6 +69,35 @@ describe("MemoryLedger (development ledger with the database's rules)", () => {
     await rejects(l.settleTable("t3", [{ playerId: "a", amount: -1, kind: "table_refund" }]), /positive/);
   });
 
+  it("friends: ask by code, a request both ways is a yes, answer, remove, never yourself", async () => {
+    const l = new MemoryLedger();
+    await l.ensureProfile("a", "Zain", true);
+    await l.ensureProfile("b", "Ali", true);
+    await l.ensureProfile("c", "Sara", true);
+    assert.strictEqual(await l.userIdByCode(await l.playerCode("b")), "b");
+    assert.strictEqual(await l.userIdByCode("ZZZZZZZZ"), null);
+    await rejects(l.requestFriend("a", "a"), /own code/);
+
+    assert.strictEqual(await l.requestFriend("a", "b"), "requested");
+    assert.strictEqual(await l.requestFriend("a", "b"), "requested");
+    assert.deepStrictEqual((await l.friendPairs("a")).outgoing.map((f) => f.name), ["Ali"]);
+    assert.deepStrictEqual((await l.friendPairs("b")).incoming.map((f) => f.name), ["Zain"]);
+    assert.strictEqual(await l.areFriends("a", "b"), false);
+    assert.strictEqual(await l.requestFriend("b", "a"), "accepted");
+    assert.strictEqual(await l.areFriends("b", "a"), true);
+    assert.strictEqual(await l.requestFriend("a", "b"), "already");
+
+    assert.strictEqual(await l.requestFriend("c", "a"), "requested");
+    await rejects(l.answerFriend("c", "a", true), /no request/);
+    await l.answerFriend("a", "c", false);
+    assert.deepStrictEqual((await l.friendPairs("a")).incoming, []);
+    await l.requestFriend("c", "a");
+    await l.answerFriend("a", "c", true);
+    assert.deepStrictEqual((await l.friendPairs("a")).friends.map((f) => f.name), ["Ali", "Sara"]);
+    await l.removeFriend("b", "a");
+    assert.deepStrictEqual((await l.friendPairs("a")).friends.map((f) => f.name), ["Sara"]);
+  });
+
   it("ledgerFromEnv: memory in development, Supabase when configured, refuses production without it", () => {
     assert.ok(ledgerFromEnv({}) instanceof MemoryLedger);
     assert.throws(() => ledgerFromEnv({ NODE_ENV: "production" }), /required in production/);

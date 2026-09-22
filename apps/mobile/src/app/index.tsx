@@ -24,6 +24,7 @@ import { useCourtPiece } from '@/hooks/use-court-piece';
 import { useFiveRow } from '@/hooks/use-fiverow';
 import { useLounge } from '@/hooks/use-lounge';
 import { useTheme } from '@/hooks/use-theme';
+import { takeKnock, usePendingKnock } from '@/lib/intents';
 
 /**
  * The first screen: your lounge (PUBG style). You land in it, friends knock
@@ -50,10 +51,19 @@ export default function LoungeScreen() {
 
   // You always have a lounge: open yours on arrival, and again whenever you
   // leave a friend's (or are shown out).
-  const { status: loungeStatus, enterMine } = lounge;
+  const { status: loungeStatus, enterMine, knock } = lounge;
   useEffect(() => {
     if (loungeStatus === 'idle') void enterMine();
   }, [loungeStatus, enterMine]);
+
+  // The Friends tab asked us to knock on someone: do it once we are settled.
+  const pendingKnock = usePendingKnock();
+  useEffect(() => {
+    if (pendingKnock && loungeStatus === 'in_lounge') {
+      const code = takeKnock();
+      if (code) void knock(code);
+    }
+  }, [pendingKnock, loungeStatus, knock]);
 
   const atTable = table.status === 'seated' || table.status === 'connecting';
   const atCards = cards.status === 'seated' || cards.status === 'connecting';
@@ -328,7 +338,7 @@ function KnockCard({ lounge, busy }: { lounge: ReturnType<typeof useLounge>; bus
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-        Join a friend: type their code and knock
+        Join a friend: type their code and knock (friends only; add them in the Friends tab first)
       </ThemedText>
       <TextInput
         value={code}

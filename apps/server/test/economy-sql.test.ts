@@ -123,6 +123,41 @@ describe("economy SQL (embedded Postgres)", function () {
     await rejects(db.query("select public.settle_table($1, $2::jsonb)", ["table-2", JSON.stringify([{ user_id: U1, amount: -5, kind: "table_refund" }])]), /positive/);
   });
 
+  it("friends: ask by code, a request both ways is a yes, answer, remove, never yourself", async () => {
+    const lists = async (u: string) => (await db.query<{ l: { friends: any[]; incoming: any[]; outgoing: any[] } }>("select public.friend_lists($1) as l", [u])).rows[0].l;
+    const request = async (u: string, f: string) => (await db.query<{ r: string }>("select public.request_friend($1, $2) as r", [u, f])).rows[0].r;
+    const areFriends = async (u: string, f: string) => (await db.query<{ b: boolean }>("select public.are_friends($1, $2) as b", [u, f])).rows[0].b;
+
+    const code1 = (await db.query<{ c: string }>("select player_code as c from public.profiles where id = $1", [U1])).rows[0].c;
+    assert.strictEqual((await db.query<{ id: string }>("select public.user_id_by_code($1) as id", [` ${code1.toLowerCase()} `])).rows[0].id, U1);
+    assert.strictEqual((await db.query<{ id: string }>("select public.user_id_by_code($1) as id", ["ZZZZZZZZ"])).rows[0].id, null);
+    await rejects(db.query("select public.request_friend($1, $1)", [U1]), /own code/);
+
+    assert.strictEqual(await request(U1, U2), "requested");
+    assert.strictEqual(await request(U1, U2), "requested", "asking twice changes nothing");
+    assert.deepStrictEqual((await lists(U1)).outgoing.map((r) => r.user_id), [U2]);
+    assert.deepStrictEqual((await lists(U2)).incoming.map((r) => r.user_id), [U1]);
+    assert.strictEqual(await areFriends(U1, U2), false);
+
+    assert.strictEqual(await request(U2, U1), "accepted", "they asked me: a request back is a yes");
+    assert.strictEqual(await areFriends(U2, U1), true);
+    assert.deepStrictEqual((await lists(U1)).friends.map((r) => [r.user_id, r.display_name]), [[U2, "Ali Khan"]]);
+    assert.strictEqual(await request(U1, U2), "already");
+
+    await db.query("select public.remove_friend($1, $2)", [U1, U2]);
+    assert.strictEqual(await areFriends(U1, U2), false);
+    assert.deepStrictEqual(await lists(U1), { friends: [], incoming: [], outgoing: [] });
+
+    assert.strictEqual(await request(U2, U1), "requested");
+    await rejects(db.query("select public.answer_friend($1, $2, true)", [U2, U1]), /no request/); // you cannot answer your own request
+    await db.query("select public.answer_friend($1, $2, false)", [U1, U2]);
+    assert.deepStrictEqual(await lists(U2), { friends: [], incoming: [], outgoing: [] }, "declined: gone");
+    await rejects(db.query("select public.answer_friend($1, $2, true)", [U1, U2]), /no request/);
+    assert.strictEqual(await request(U2, U1), "requested");
+    await db.query("select public.answer_friend($1, $2, true)", [U1, U2]);
+    assert.strictEqual(await areFriends(U1, U2), true);
+  });
+
   it("the ledger is append-only and balances never go below zero", async () => {
     await rejects(db.query("update public.coin_ledger set amount = 999999 where user_id = $1", [U1]), /append-only/);
     await rejects(db.query("delete from public.coin_ledger where user_id = $1", [U1]), /append-only/);
