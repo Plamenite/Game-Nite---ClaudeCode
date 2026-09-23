@@ -17,3 +17,4 @@ export * from './wallet.js';
 export * from './lounge.js';
 export * from './friends.js';
 export * from './voice.js';
+export * from './how-to-play.js';

@@ -6,8 +6,8 @@
 - ALWAYS ask 1–2 clarifying questions before building or changing architecture
   or game logic. Never make unilateral design decisions.
 - Explain in plain English. Give 2–3 options with pros and cons, recommend one, wait.
-- One verifiable step at a time, commands explained. Founder only talks to
-  Claude: do all possible in repo/cloud; local = one paste + Yes.
+  One verifiable step at a time. Founder only talks to Claude: do all possible
+  in repo/cloud; local = one paste + Yes. Apple Team ID received: 2Z3295J6DG.
 
 ## 2. What Gamenite is: an iOS-first mobile multiplayer board/card platform. Games:
 1. **Five Row** (id `fiverow`, placeholder name "Jack Streak"): resembles a
@@ -38,8 +38,8 @@
   Android soon; EAS builds iOS in the cloud. Bundle id `app.plamenite.gamenite`,
   domain plamenite.app. Undecided: AdMob, RevenueCat.
 - Game server: **Colyseus (TS)**, authoritative: deals, hides hands, validates moves.
-- Voice: **Agora** (~$0.99/1k user-min after 10k free). OFF by default, auto-leave
-  idle, small free daily allowance, VIP unlimited, coins for extra, server meters.
+- Voice: **Agora** (~$0.99/1k user-min after 10k free), small free daily allowance,
+  VIP unlimited, coins for extra, server meters.
 - Auth/DB/storage: **Supabase**; coin ledger is SQL, server-written ONLY. Sign-in
   (DECIDED): Facebook, Google, Apple, then guest; name from the login account,
   guests "Player 12345", changeable; guests upgrade keeping coins. `docs/ACCOUNTS.md`.
@@ -54,8 +54,8 @@
   meters minutes (60/day PLACEHOLDER); controls built, engine stub until Agora.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
-- `apps/mobile` Expo SDK 57 app. `apps/server` Colyseus 0.18 server.
-  `packages/game-rules` shared TS contracts + rules used by BOTH (ESM).
+- `apps/mobile` Expo SDK 57 app; `apps/server` Colyseus 0.18; `packages/game-rules`
+  shared TS contracts + rules used by BOTH (ESM).
 - Dev resolves the shared package to SOURCE via tsconfig `paths` (server: tsx
   watch; app: Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`).
   Prod server build uses `dist/` (root `postinstall`). `apps/mobile/expo-env.d.ts`
@@ -83,7 +83,8 @@
 - Lounge LIVE: `game-rules/src/lounge.ts`, `LoungeRoom` (friend-gated knock,
   accept/decline with close codes, kick, make_leader, start → reservations +
   heldSeats, only a LAUNCH_SECRET reservation may pick a seat, back to open),
-  app Lounge tab `app/index.tsx` + `use-lounge`; Friends, Games, You tabs.
+  app Lounge tab `app/index.tsx` + `use-lounge`; Friends, Games (how to play
+  from `game-rules/src/how-to-play.ts`, tested for wording), You tabs.
 - Sign-in code DONE, awaiting accounts: app `lib/session.ts` + `lib/auth.ts`
   (Supabase OAuth browser flow, native Apple, anonymous guests, dev guest token
   kept on the phone), gate in `app/_layout.tsx`. Server `src/auth.ts` verifies
@@ -95,5 +96,5 @@
   `onDrop` first: skip `allowReconnection` for own codes. Shell: absolute paths.
 
 ## 7. Project conventions
-- Founder: Windows PC daily; MacBook Air for Xcode. Branch: `claude/modest-gates-unuglw`.
-  Commit small and often, plain-English messages. Keep this file < 100 lines.
+- Founder: Windows PC daily; MacBook Air for Xcode. Branch `claude/modest-gates-unuglw`.
+  Small plain-English commits. Keep this file < 100 lines.

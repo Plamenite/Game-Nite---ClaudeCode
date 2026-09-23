@@ -115,7 +115,7 @@ before the app can be listed; Meta needs the first and the third.
 ## Checklist of what to send back
 
 - Expo username
-- Apple Team ID
+- Apple Team ID: received, `2Z3295J6DG` (recorded in `apps/mobile/app.json`)
 - Supabase Project URL and anon/publishable key
 - Google iOS client ID and Web client ID
 - Facebook App ID

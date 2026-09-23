@@ -73,6 +73,8 @@ use the tunnel command.
    card (both spaces taken) can be swapped once per turn. Thirty seconds per
    turn; if you run out, the server plays a random legal card for you.
 
+The **Games** tab has **How to play** for both games, section by section.
+
 The 🎙 strip in the lounge and above the table is voice: your mic button,
 who has a mic on, and tap a name to mute them for yourself. Audio itself
 arrives with the Agora account (`docs/VOICE.md`).

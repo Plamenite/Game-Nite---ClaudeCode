@@ -11,7 +11,8 @@
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "app.plamenite.gamenite",
       "supportsTablet": false,
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "appleTeamId": "2Z3295J6DG"
     },
     "android": {
       "adaptiveIcon": {
