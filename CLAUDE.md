@@ -7,7 +7,8 @@
   or game logic. Never make unilateral design decisions.
 - Explain in plain English. Give 2–3 options with pros and cons, recommend one, wait.
   One verifiable step at a time. Founder only talks to Claude: do all possible
-  in repo/cloud; local = one paste + Yes. Apple Team ID received: 2Z3295J6DG.
+  in repo/cloud; local = one paste + Yes. Accounts received 2026-09-23, see
+  `docs/ACCOUNTS.md` checklist; this cloud proxy cannot reach supabase.co.
 
 ## 2. What Gamenite is: an iOS-first mobile multiplayer board/card platform. Games:
 1. **Five Row** (id `fiverow`, placeholder name "Jack Streak"): resembles a
@@ -16,7 +17,6 @@
 2. **Court Piece (Rang)** — 4-player, 2-team trick-taking card game. Two
    games: Single Siri and Double Siri; "blind" first-cut trump in both.
 
-### Social, lobby, economy
 - Economy (DECIDED, `docs/ECONOMY.md`, modelled on Ludo Star): NO blockchain
   or real-money payouts. Start 1,000; daily bonus is a login streak (200,
   +50/day, 500 from day 7, restart after a miss); ad 100 (max 5/day); tables
@@ -37,8 +37,8 @@
 - Frontend: **React Native + Expo (TypeScript)**, one codebase for iOS now and
   Android soon; EAS builds iOS in the cloud. Bundle id `app.plamenite.gamenite`,
   domain plamenite.app. Undecided: AdMob, RevenueCat.
-- Game server: **Colyseus (TS)**, authoritative: deals, hides hands, validates moves.
-- Voice: **Agora** (~$0.99/1k user-min after 10k free); daily free allowance, VIP unlimited.
+- Game server: **Colyseus (TS)**, authoritative (deals, hidden hands, move checks).
+  Voice: **Agora** (~$0.99/1k user-min after 10k free); daily free allowance, VIP unlimited.
 - Auth/DB/storage: **Supabase**; coin ledger is SQL, server-written ONLY. Sign-in
   (DECIDED): Facebook, Google, Apple, then guest; name from the login account,
   guests "Player 12345", changeable; guests upgrade keeping coins. `docs/ACCOUNTS.md`.
@@ -56,10 +56,10 @@
 - `apps/mobile` Expo SDK 57 app; `apps/server` Colyseus 0.18; `packages/game-rules`
   shared TS contracts + rules used by BOTH (ESM).
 - Dev resolves the shared package to SOURCE via tsconfig `paths` (server: tsx
-  watch; app: Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`).
-  Prod server build uses `dist/` (root `postinstall`). `apps/mobile/expo-env.d.ts`
-  is committed so `tsc` works fresh. Root: `npm run mobile|server|test|typecheck`
-  (CI runs the last two). Windows: `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
+  watch; app: Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`); prod
+  server uses `dist/` (root `postinstall`). `apps/mobile/expo-env.d.ts` is committed.
+  Root: `npm run mobile|server|test|typecheck` (CI: last two). Windows:
+  `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
 - Five Row LIVE: engine `game-rules/src/fiverow-*.ts` (own board, never
   regenerate), `FiveRowRoom` (private hands, crypto RNG, 30 s turns, timeout →
   random move, 3 in a row → abandoned), board `components/fiverow-board.tsx`.
@@ -90,9 +90,9 @@
   JWTs + name from claims (guests only if ALLOW_GUEST_TOKENS); `GET/POST /me`.
   Friends: SQL `friendships`, `src/friends.ts`, `src/presence.ts` (TTL), Friends
   tab. Voice: `src/voice-provider.ts` (agora-token, env), SQL `voice_usage`.
-- Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`
-  (plain keys). Room tests share ONE booted test server. `client.leave(code)` hits
-  `onDrop` first: skip `allowReconnection` for own codes. Shell: absolute paths.
+- Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`. Room
+  tests share ONE booted server. `client.leave(code)` hits `onDrop` first: skip
+  `allowReconnection` for own codes. Shell: absolute paths.
 
 ## 7. Project conventions
 - Founder: Windows PC daily; MacBook Air for Xcode. Branch `claude/modest-gates-unuglw`.

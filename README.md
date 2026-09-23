@@ -54,9 +54,12 @@ use the tunnel command.
 
 1. In one terminal: `npm run server`. Click Allow if Windows Firewall asks.
 2. In another terminal: `npm run mobile`, then open the app on your iPhone.
-   Tap **Continue as guest** (Facebook, Google and Apple switch on once the
-   accounts exist). You land in **your lounge**; your 8-character code is at
-   the top, and the **You** tab lets you change your name.
+   Tap **Continue as a guest**: this signs you in as an anonymous Supabase
+   user, so the dashboard checklist in `docs/ACCOUNTS.md` (anonymous
+   sign-ins ON, the migration run) must be done first. Facebook, Google and
+   Apple work once each provider is switched on there. You land in **your
+   lounge**; your 8-character code is at the top, and the **You** tab lets
+   you change your name.
 3. For a second player, press `w` in the mobile terminal to open the app in
    a browser tab. Only friends can knock, so first befriend: in the browser's
    **Friends** tab type the phone's code and **Send request**; on the phone,

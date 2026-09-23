@@ -27,8 +27,8 @@ Send Claude: your Expo username.
 2. Once approved, open https://developer.apple.com/account and find your
    **Team ID** (10 characters).
 
-Send Claude: the Team ID. Claude then registers the app id
-`app.plamenite.gamenite` and enables Sign in with Apple through Expo's tools.
+Done: Team ID received and recorded. The app id `app.plamenite.gamenite`
+and Sign in with Apple are set in `app.json`; EAS registers them at first build.
 
 ## 3. Supabase (free tier) — accounts, coins, friends
 
@@ -114,38 +114,82 @@ before the app can be listed; Meta needs the first and the third.
 
 ## Checklist of what to send back
 
-- Expo username
-- Apple Team ID: received, `2Z3295J6DG` (recorded in `apps/mobile/app.json`)
-- Supabase Project URL and anon/publishable key
-- Google iOS client ID and Web client ID
-- Facebook App ID
-- Agora App ID
-- Confirmation that the domain is bought
+All received on 2026-09-23 and recorded in the repo (public values only):
 
-## Wiring sign-in once the accounts exist
+- Expo username: `plamenite` (`apps/mobile/app.json` owner)
+- Apple Team ID: `2Z3295J6DG` (`apps/mobile/app.json`, `apps/mobile/eas.json`)
+- Supabase Project URL `https://aimmofpruwznsidtxcyt.supabase.co` and the
+  publishable key (`apps/mobile/.env.development`, `.env.production`,
+  `apps/server/.env.development`, `.env.production`)
+- Google iOS client ID `990433516126-lrnv3ri856d6bkf6u939a9fgmmcesnim` and
+  Web client ID `990433516126-dfc4kdkffa2tfu5eq2jj6okdrt6hlej4` (both
+  `.apps.googleusercontent.com`): used inside Supabase, not in the app
+- Facebook App ID `1818797646231245`: used inside Supabase, not in the app
+- Agora App ID `ae5864ede5694931ac007396ed086143` (`apps/server/.env.*`)
+- Domain plamenite.app: bought
 
-The app already has the sign-in screen (Facebook, Google, Apple, then
-guest) and the server already imports names from login accounts. What is
-left is configuration, all public values except where marked SECRET:
+## Supabase dashboard checklist (tick through once)
 
-1. **Supabase → app.** Put the project URL and anon key in
-   `apps/mobile/.env` (copy `apps/mobile/.env.example`). Both are public.
-2. **Supabase → server.** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
-   (SECRET) in the server's hosting environment, plus `SUPABASE_JWT_SECRET`
-   (SECRET) only for older projects. Turn `ALLOW_GUEST_TOKENS` off there.
-3. **Supabase → Authentication → URL configuration.** Add
-   `gamenite://auth/callback` to the redirect allow list. That is where the
-   browser sends the phone back after Facebook or Google.
-4. **Supabase → Authentication → Providers.** Enable Anonymous sign-ins
-   (guests), and "manual linking" so a guest who signs in keeps their coins.
-   Enable Facebook, Google and Apple with each one's App ID and secret
-   (SECRETS, pasted into Supabase only, never into chat or the repo).
-5. **Apple.** Sign in with Apple is switched on in `app.json`
-   (`usesAppleSignIn`); EAS adds the capability to the App ID. On iPhone the
-   native Apple button is used; on Android and when upgrading a guest, the
-   browser flow through Supabase is used instead.
-6. **Facebook.** The Meta app needs the data-deletion URL and, later, review
-   for the friends permission (`user_friends`). Sign-in itself needs no review.
-   DECIDED: Facebook friends are imported only when the player taps "Find
-   Facebook friends" on the Friends tab (Meta requires a visible reason
-   before the permission is asked), never automatically at sign-in.
+Open https://supabase.com/dashboard, pick the project, then:
+
+1. **SQL Editor → New query.** Paste the whole file at
+   https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/supabase/migrations/20260922000001_economy.sql
+   and press Run. That creates profiles, the coin ledger, friends and voice
+   minutes with all the rules. Safe to run again later; it only adds.
+2. **Authentication → Sign In / Providers → Anonymous sign-ins: ON.**
+   This is what "Continue as a guest" uses now.
+3. **Authentication → Sign In / Providers → Google: ON.** Client ID = the
+   Web client ID above; Client Secret = from Google Cloud (SECRET, paste
+   into Supabase only). Under "Authorized Client IDs" add the iOS client ID.
+   In Google Cloud the OAuth client's authorized redirect URI must be
+   `https://aimmofpruwznsidtxcyt.supabase.co/auth/v1/callback`.
+4. **Facebook: ON.** App ID above; App Secret from Meta (SECRET). In the
+   Meta app, Facebook Login → Valid OAuth Redirect URIs must include the
+   same `.../auth/v1/callback` address.
+5. **Apple: ON, when the developer account is approved.** Client IDs:
+   `app.plamenite.gamenite` (the bundle id, for the native button). For the
+   browser flow (Android and guest upgrades) also a Services ID, the Team
+   ID `2Z3295J6DG`, a Key ID and the .p8 key (SECRET) from
+   developer.apple.com → Certificates, Identifiers & Profiles.
+6. **Authentication → URL Configuration → Redirect URLs:** add
+   `gamenite://auth/callback`.
+7. **Authentication → Settings:** turn on **manual linking** ("Allow manual
+   linking"), so a guest who adds an account keeps their coins.
+8. **Project Settings → JWT Keys.** If it says the project uses the legacy
+   JWT secret, click **Migrate** to signing keys. The game server checks
+   tokens against the public keys; the app will say so plainly if this step
+   is still missing.
+9. **Project Settings → API Keys → service role / secret key.** Copy it
+   ONLY into a local file on your PC (never chat, never the repo). In
+   PowerShell, in the project folder, paste one line (replace the value):
+
+   ```powershell
+   Set-Content -Path apps/server/.env.development.local -Value "SUPABASE_SERVICE_ROLE_KEY=paste-the-secret-key-here"
+   ```
+
+   With that file, `npm run server` keeps coins, profiles and friends in
+   Supabase. Without it they live in memory, which is fine for a first try.
+
+## Expo (EAS) project
+
+One paste in PowerShell, in the project folder; answer Yes when it asks to
+create the project under `plamenite`:
+
+```powershell
+npx eas-cli@latest init
+```
+
+It prints a **Project ID**. Send that to Claude, who records it in
+`apps/mobile/app.json`. After that, `npx eas-cli@latest build --profile development --platform ios`
+builds the app in the cloud (needed once voice's native SDK is added).
+
+## Agora
+
+The App ID is in the server's env files. The **App Certificate** is SECRET:
+in PowerShell, paste one line (replace the value):
+
+```powershell
+Add-Content -Path apps/server/.env.development.local -Value "AGORA_APP_CERTIFICATE=paste-the-certificate-here"
+```
+
+Voice tickets then work; audio itself needs the native SDK build (docs/VOICE.md).

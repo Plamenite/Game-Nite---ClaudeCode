@@ -85,6 +85,16 @@ describe("authenticate (Supabase tokens and dev guest tokens)", () => {
       assert.deepStrictEqual(await authenticate(token, {}, ctx), { userId: "anon-user-id", guest: true });
     });
 
+    it("explains a legacy-secret token instead of calling it invalid", async () => {
+      const legacy = await new SignJWT({ sub: "11111111-2222-3333-4444-555555555555", role: "authenticated" })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuer(ISSUER)
+        .setAudience("authenticated")
+        .setExpirationTime("1h")
+        .sign(new TextEncoder().encode("some-legacy-secret-that-the-server-does-not-know"));
+      await expectServerError(authenticate(legacy, {}, ctx), 503, /legacy JWT secret/);
+    });
+
     it("rejects expired, wrong-audience, tampered, and unsigned tokens", async () => {
       await expectServerError(authenticate(await sign({ sub: "u" }, { expired: true }), {}, ctx), 401, /invalid or expired/);
       await expectServerError(authenticate(await sign({ sub: "u" }, { audience: "anon" }), {}, ctx), 401, /invalid or expired/);

@@ -1,5 +1,5 @@
 import { ServerError, type AuthContext } from "colyseus";
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify, type JWTVerifyGetKey } from "jose";
 
 /** What every room learns about a connected player. */
 export interface PlayerAuth {
@@ -37,6 +37,8 @@ export interface AuthSettings {
   allowGuestTokens: boolean;
   /** Verifies real Supabase session tokens. Null until login is configured. */
   verifier: TokenVerifier | null;
+  /** True when the verifier uses the project's legacy shared secret (HS256). */
+  usesSharedSecret?: boolean;
 }
 
 /**
@@ -77,6 +79,7 @@ export function settingsFromEnv(env: NodeJS.ProcessEnv = process.env): AuthSetti
   return {
     allowGuestTokens: env.ALLOW_GUEST_TOKENS === "true",
     verifier,
+    usesSharedSecret: Boolean(url && secret),
   };
 }
 
@@ -123,6 +126,22 @@ export async function authenticate(token: string, _options: unknown, _context: A
   try {
     return await settings.verifier(token);
   } catch {
+    // A token signed with the legacy shared secret cannot be checked against
+    // the project's public keys. Say so, instead of "invalid session".
+    if (!settings.usesSharedSecret && algorithmOf(token) === "HS256") {
+      throw new ServerError(
+        503,
+        "this Supabase project still signs tokens with its legacy JWT secret: in Supabase open Project Settings > JWT Keys and migrate to signing keys, or set SUPABASE_JWT_SECRET on the server",
+      );
+    }
     throw new ServerError(401, "your session is invalid or expired; please sign in again");
+  }
+}
+
+function algorithmOf(token: string): string | undefined {
+  try {
+    return decodeProtectedHeader(token).alg;
+  } catch {
+    return undefined;
   }
 }
