@@ -159,37 +159,64 @@ Open https://supabase.com/dashboard, pick the project, then:
    JWT secret, click **Migrate** to signing keys. The game server checks
    tokens against the public keys; the app will say so plainly if this step
    is still missing.
-9. **Project Settings → API Keys → service role / secret key.** Copy it
-   ONLY into a local file on your PC (never chat, never the repo). In
-   PowerShell, in the project folder, paste one line (replace the value):
+9. **Project Settings → API Keys → secret key** (older projects call it
+   "service_role"). Copy it ONLY into a local file on your PC, never chat,
+   never the repo. See "Pasting secrets on your PC" below.
+
+## Expo (EAS) project: on the website, no typing
+
+1. Sign in at https://expo.dev as `plamenite`.
+2. Projects → **Create a project**. Name it `gamenite`, slug `gamenite`.
+3. It shows a **Project ID** (letters, numbers and dashes). Send that to
+   Claude, who records it in `apps/mobile/app.json`.
+
+(Please do not run `eas init` on your PC: it edits `app.json` locally, and
+that local edit blocks the setup script from pulling later updates.)
+
+## Pasting secrets on your PC
+
+Secrets live in one file on your PC that git ignores:
+`Documents\gamenite\apps\server\.env.development.local`. The server
+reads it every time it starts. Nothing here ever leaves your PC.
+
+1. Press the **Windows key**, type `powershell`, press **Enter**. A blue or
+   black window opens with a line ending in `>`.
+2. Go to the server folder. Paste this and press Enter:
 
    ```powershell
-   Set-Content -Path apps/server/.env.development.local -Value "SUPABASE_SERVICE_ROLE_KEY=paste-the-secret-key-here"
+   cd $HOME\Documents\gamenite\apps\server
    ```
 
-   With that file, `npm run server` keeps coins, profiles and friends in
-   Supabase. Without it they live in memory, which is fine for a first try.
+   If it says "Cannot find path", the project is not on this PC yet: run
+   the setup one-liner from the README first, then come back.
+3. In Notepad, write the line below, then replace the part after `=` with
+   your secret (keep no spaces around `=`, and keep the single quotes):
 
-## Expo (EAS) project
+   ```powershell
+   Add-Content -Path .env.development.local -Value 'SUPABASE_SERVICE_ROLE_KEY=paste-the-secret-key-here'
+   ```
 
-One paste in PowerShell, in the project folder; answer Yes when it asks to
-create the project under `plamenite`:
+   Copy the whole finished line from Notepad, click in PowerShell,
+   **right-click** to paste, press **Enter**. No message means it worked.
+4. Same for the Agora App Certificate (Agora console → your project →
+   Primary Certificate):
 
-```powershell
-npx eas-cli@latest init
-```
+   ```powershell
+   Add-Content -Path .env.development.local -Value 'AGORA_APP_CERTIFICATE=paste-the-certificate-here'
+   ```
 
-It prints a **Project ID**. Send that to Claude, who records it in
-`apps/mobile/app.json`. After that, `npx eas-cli@latest build --profile development --platform ios`
-builds the app in the cloud (needed once voice's native SDK is added).
+5. Check it (shows the names; glance that the values look right):
+
+   ```powershell
+   Get-Content .env.development.local
+   ```
+
+   A typo? Paste the corrected line again: the last line for a name wins.
+6. Close Notepad without saving. Next `npm run server` prints
+   "✅ .env.development.local loaded (local secrets)."
 
 ## Agora
 
 The App ID is in the server's env files. The **App Certificate** is SECRET:
-in PowerShell, paste one line (replace the value):
-
-```powershell
-Add-Content -Path apps/server/.env.development.local -Value "AGORA_APP_CERTIFICATE=paste-the-certificate-here"
-```
-
+it goes in the local file, step 4 of "Pasting secrets on your PC" above.
 Voice tickets then work; audio itself needs the native SDK build (docs/VOICE.md).

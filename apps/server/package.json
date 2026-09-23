@@ -38,6 +38,7 @@
     "@supabase/supabase-js": "^2.117.0",
     "agora-token": "^2.0.6",
     "colyseus": "^0.18.2",
+    "dotenv": "^18.0.3",
     "express": "^5.2.1",
     "jose": "^6.2.12"
   }

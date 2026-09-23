@@ -30,3 +30,15 @@ jobs:
 
       - name: Run all tests
         run: npm test
+
+      # Tests load the code differently from a real start-up, so also start
+      # the server for real and ask it a question. Catches start-up crashes.
+      - name: Start the server and check it answers
+        working-directory: apps/server
+        run: |
+          npx tsx src/index.ts > boot.log 2>&1 &
+          for i in $(seq 1 45); do
+            if curl -fs http://localhost:2567/hi; then echo; echo "server is up"; kill %1; exit 0; fi
+            sleep 1
+          done
+          echo "server did not start:"; cat boot.log; exit 1

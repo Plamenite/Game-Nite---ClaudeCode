@@ -7,8 +7,8 @@
   or game logic. Never make unilateral design decisions.
 - Explain in plain English. Give 2–3 options with pros and cons, recommend one, wait.
   One verifiable step at a time. Founder only talks to Claude: do all possible
-  in repo/cloud; local = one paste + Yes. Accounts received 2026-09-23, see
-  `docs/ACCOUNTS.md` checklist; this cloud proxy cannot reach supabase.co.
+  in repo/cloud; local = one paste + Yes. Accounts received 2026-09-23; see the
+  `docs/ACCOUNTS.md` checklists. Never `eas init` locally (blocks git pull).
 
 ## 2. What Gamenite is: an iOS-first mobile multiplayer board/card platform. Games:
 1. **Five Row** (id `fiverow`, placeholder name "Jack Streak"): resembles a
@@ -87,12 +87,13 @@
 - Sign-in code DONE, awaiting accounts: app `lib/session.ts` + `lib/auth.ts`
   (Supabase OAuth browser flow, native Apple, anonymous guests, dev guest token
   kept on the phone), gate in `app/_layout.tsx`. Server `src/auth.ts` verifies
-  JWTs + name from claims (guests only if ALLOW_GUEST_TOKENS); `GET/POST /me`.
-  Friends: SQL `friendships`, `src/friends.ts`, `src/presence.ts` (TTL), Friends
-  tab. Voice: `src/voice-provider.ts` (agora-token, env), SQL `voice_usage`.
+  JWTs + name from claims (guests only if ALLOW_GUEST_TOKENS); `GET/POST /me`. Friends:
+  SQL `friendships`, `src/friends.ts`, `src/presence.ts`; voice `src/voice-provider.ts`.
 - Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`. Room
   tests share ONE booted server. `client.leave(code)` hits `onDrop` first: skip
-  `allowReconnection` for own codes. Shell: absolute paths.
+  `allowReconnection` for own codes. Shell: absolute paths. CJS packages (agora-token):
+  default import, never named (tests pass, real start-up crashes); CI boots the server.
+  Local secrets: `apps/server/.env.development.local`, loaded by `src/local-env.ts`.
 
 ## 7. Project conventions
 - Founder: Windows PC daily; MacBook Air for Xcode. Branch `claude/modest-gates-unuglw`.

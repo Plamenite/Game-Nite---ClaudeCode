@@ -7,6 +7,8 @@
  *
  * See: https://docs.colyseus.io/server
  */
+// Local secrets first (apps/server/.env.development.local, ignored by git).
+import "./local-env.js";
 import { listen } from "@colyseus/tools";
 
 // Import Colyseus config

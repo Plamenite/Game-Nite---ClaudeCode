@@ -1,4 +1,7 @@
-import { RtcRole, RtcTokenBuilder } from "agora-token";
+// agora-token is a CommonJS package: take the default export, then its parts.
+// (A named import works under the test runner but crashes a real start-up.)
+import agora from "agora-token";
+const { RtcRole, RtcTokenBuilder } = agora;
 import { VOICE_TOKEN_MINUTES, type VoiceTicket } from "@gamenite/game-rules";
 
 /**
