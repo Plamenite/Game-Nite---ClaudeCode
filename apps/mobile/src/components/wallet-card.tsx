@@ -30,12 +30,12 @@ export function WalletCard() {
       </View>
       {error ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Could not reach the server. {error}
+          {error}
         </ThemedText>
       ) : null}
       <View style={styles.actions}>
         <Action
-          label={wallet?.dailyBonusAvailable ? `Claim daily bonus +${wallet.dailyBonusCoins}` : 'Daily bonus claimed'}
+          label={!wallet ? (error ? 'Daily bonus: server not reached' : 'Checking the daily bonus…') : wallet.dailyBonusAvailable ? `Claim daily bonus +${wallet.dailyBonusCoins}` : 'Daily bonus claimed'}
           disabled={busy || !wallet?.dailyBonusAvailable}
           onPress={() => void claimDaily()}
         />

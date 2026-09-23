@@ -7,7 +7,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { getClient, setAuthToken } from '@/lib/colyseus';
+import { getClient, setAuthToken, withServer } from '@/lib/colyseus';
 import { getSession, patchSession, resetSession, type SignInProvider } from '@/lib/session';
 import { getSupabase, supabaseConfigured } from '@/lib/supabase';
 
@@ -58,11 +58,11 @@ async function becomeReady(token: string, provider: SignInProvider, guest: boole
   setAuthToken(token);
   patchSession({ status: 'ready', token, provider, guest, busy: false, error: null });
   try {
-    const me = (await getClient().http.get(ME_ROUTE)).data as MeSnapshot;
+    const me = (await withServer((signal) => getClient().http.get(ME_ROUTE, { signal }))).data as MeSnapshot;
     patchSession({ name: me.name, playerCode: me.playerCode });
   } catch (e) {
     // The lounge screen retries; the session is still valid.
-    patchSession({ error: `Could not reach the game server. ${message(e)}` });
+    patchSession({ error: message(e) });
   }
 }
 
@@ -181,7 +181,7 @@ export async function signInWith(provider: Exclude<SignInProvider, 'guest'>) {
 
 /** Change what other players see (2 to 16 letters, digits, spaces). */
 export async function setName(name: string) {
-  const me = (await getClient().http.post(ME_ROUTE, { body: { name } })).data as MeSnapshot;
+  const me = (await withServer((signal) => getClient().http.post(ME_ROUTE, { body: { name }, signal }))).data as MeSnapshot;
   patchSession({ name: me.name });
 }
 

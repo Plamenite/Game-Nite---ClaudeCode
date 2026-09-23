@@ -11,7 +11,7 @@ import {
 } from '@gamenite/game-rules';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getClient } from '@/lib/colyseus';
+import { getClient, withServer } from '@/lib/colyseus';
 import { getSession } from '@/lib/session';
 
 export type CourtPieceStatus = 'idle' | 'connecting' | 'seated' | 'left' | 'error';
@@ -70,7 +70,7 @@ export function useCourtPiece() {
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().joinOrCreate<CourtPieceStateLike>(ROOMS.courtpiece, { variant, entry, name: getSession().name });
+        const room = await withServer(() => getClient().joinOrCreate<CourtPieceStateLike>(ROOMS.courtpiece, { variant, entry, name: getSession().name }));
         attach(room);
       } catch (e) {
         setStatus('error');
@@ -87,7 +87,7 @@ export function useCourtPiece() {
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().consumeSeatReservation<CourtPieceStateLike>(reservation);
+        const room = await withServer(() => getClient().consumeSeatReservation<CourtPieceStateLike>(reservation));
         attach(room);
       } catch (e) {
         setStatus('error');

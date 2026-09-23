@@ -107,7 +107,7 @@ export default function FriendsScreen() {
             <ThemedText type="smallBold">Your friends</ThemedText>
             {!lists ? (
               <ThemedText type="small" themeColor="textSecondary">
-                Loading…
+                {friends.error ? 'Could not load your friends. Pull the tab again, or check the message above.' : 'Loading…'}
               </ThemedText>
             ) : lists.friends.length === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">

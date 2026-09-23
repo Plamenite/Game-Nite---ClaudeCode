@@ -18,7 +18,7 @@ import {
 } from '@gamenite/game-rules';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getClient } from '@/lib/colyseus';
+import { getClient, withServer } from '@/lib/colyseus';
 import { getSession, patchSession } from '@/lib/session';
 import { joinChannel, leaveChannel, patchVoice, setMicLocal } from '@/lib/voice';
 
@@ -95,7 +95,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
       setMe(known);
       return known;
     }
-    const response = await getClient().http.get(ME_ROUTE);
+    const response = await withServer((signal) => getClient().http.get(ME_ROUTE, { signal }));
     const snap = response.data as MeSnapshot;
     patchSession({ name: snap.name, playerCode: snap.playerCode });
     setMe(snap);
@@ -109,7 +109,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
     setError(null);
     try {
       const { playerCode } = await whoAmI();
-      const room = await getClient().joinOrCreate<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(getSession().name, playerCode));
+      const room = await withServer(() => getClient().joinOrCreate<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(getSession().name, playerCode)));
       attach(room);
     } catch (e) {
       setStatus('error');
@@ -138,7 +138,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
       setError(null);
       setSnapshot(null);
       try {
-        const room = await getClient().join<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(getSession().name, code));
+        const room = await withServer(() => getClient().join<LoungeStateLike>(ROOMS.lounge, loungeJoinOptions(getSession().name, code)));
         attach(room);
       } catch (e) {
         setStatus('error');

@@ -1,7 +1,7 @@
 import { WALLET_ROUTES, dailyBonusForDay, type WalletSnapshot } from '@gamenite/game-rules';
 import { useCallback, useState } from 'react';
 
-import { getClient } from '@/lib/colyseus';
+import { getClient, withServer } from '@/lib/colyseus';
 
 /**
  * My coins, read over HTTP with the same token the tables use. The server
@@ -16,7 +16,7 @@ export function useWallet() {
     setBusy(true);
     setError(null);
     try {
-      const response = await getClient().http.get(WALLET_ROUTES.wallet);
+      const response = await withServer((signal) => getClient().http.get(WALLET_ROUTES.wallet, { signal }));
       setWallet(response.data as WalletSnapshot);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -29,7 +29,7 @@ export function useWallet() {
     setBusy(true);
     setError(null);
     try {
-      const response = await getClient().http.post(WALLET_ROUTES.daily, {});
+      const response = await withServer((signal) => getClient().http.post(WALLET_ROUTES.daily, { signal }));
       setWallet(response.data as WalletSnapshot);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

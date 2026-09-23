@@ -1,7 +1,7 @@
 import { FRIEND_ROUTES, type FriendLists } from '@gamenite/game-rules';
 import { useCallback, useState } from 'react';
 
-import { getClient } from '@/lib/colyseus';
+import { getClient, withServer } from '@/lib/colyseus';
 
 /**
  * My friends, requests in and out, and who is online. Read over HTTP with
@@ -12,11 +12,11 @@ export function useFriends() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const run = useCallback(async (work: () => Promise<{ data: unknown }>) => {
+  const run = useCallback(async (work: (signal: AbortSignal) => Promise<{ data: unknown }>) => {
     setBusy(true);
     setError(null);
     try {
-      const response = await work();
+      const response = await withServer(work);
       setLists(response.data as FriendLists);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -25,10 +25,10 @@ export function useFriends() {
     }
   }, []);
 
-  const refresh = useCallback(() => run(() => getClient().http.get(FRIEND_ROUTES.list)), [run]);
-  const add = useCallback((code: string) => run(() => getClient().http.post(FRIEND_ROUTES.add, { body: { code } })), [run]);
-  const answer = useCallback((code: string, accept: boolean) => run(() => getClient().http.post(FRIEND_ROUTES.answer, { body: { code, accept } })), [run]);
-  const remove = useCallback((code: string) => run(() => getClient().http.post(FRIEND_ROUTES.remove, { body: { code } })), [run]);
+  const refresh = useCallback(() => run((signal) => getClient().http.get(FRIEND_ROUTES.list, { signal })), [run]);
+  const add = useCallback((code: string) => run((signal) => getClient().http.post(FRIEND_ROUTES.add, { body: { code }, signal })), [run]);
+  const answer = useCallback((code: string, accept: boolean) => run((signal) => getClient().http.post(FRIEND_ROUTES.answer, { body: { code, accept }, signal })), [run]);
+  const remove = useCallback((code: string) => run((signal) => getClient().http.post(FRIEND_ROUTES.remove, { body: { code }, signal })), [run]);
 
   return { lists, busy, error, refresh, add, answer, remove };
 }

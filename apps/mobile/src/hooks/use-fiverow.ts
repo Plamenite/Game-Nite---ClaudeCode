@@ -11,7 +11,7 @@ import {
 } from '@gamenite/game-rules';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getClient } from '@/lib/colyseus';
+import { getClient, withServer } from '@/lib/colyseus';
 import { getSession } from '@/lib/session';
 import { getServerUrl } from '@/lib/server-url';
 
@@ -75,7 +75,7 @@ export function useFiveRow() {
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().joinOrCreate<FiveRowStateLike>(ROOMS.fiverow, { players, entry, name: getSession().name });
+        const room = await withServer(() => getClient().joinOrCreate<FiveRowStateLike>(ROOMS.fiverow, { players, entry, name: getSession().name }));
         attach(room);
       } catch (e) {
         setStatus('error');
@@ -92,7 +92,7 @@ export function useFiveRow() {
       setStatus('connecting');
       setError(null);
       try {
-        const room = await getClient().consumeSeatReservation<FiveRowStateLike>(reservation);
+        const room = await withServer(() => getClient().consumeSeatReservation<FiveRowStateLike>(reservation));
         attach(room);
       } catch (e) {
         setStatus('error');
