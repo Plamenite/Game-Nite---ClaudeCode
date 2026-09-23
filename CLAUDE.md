@@ -37,8 +37,7 @@
 - Frontend: **React Native + Expo (TypeScript)**, one codebase for iOS now and
   Android soon; EAS builds iOS in the cloud. Bundle id `app.plamenite.gamenite`,
   domain plamenite.app. Undecided: AdMob, RevenueCat.
-- Game server: **Colyseus (TS)**, authoritative (deals, hidden hands, move checks).
-  Voice: **Agora** (~$0.99/1k user-min after 10k free); daily free allowance, VIP unlimited.
+- Game server: **Colyseus (TS)**, authoritative. Voice: **Agora** (~$0.99/1k user-min).
 - Auth/DB/storage: **Supabase**; coin ledger is SQL, server-written ONLY. Sign-in
   (DECIDED): Facebook, Google, Apple, then guest; name from the login account,
   guests "Player 12345", changeable; guests upgrade keeping coins. `docs/ACCOUNTS.md`.
