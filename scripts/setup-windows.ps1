@@ -90,20 +90,54 @@ Step "Installing Expo's build tool (eas-cli)"
 npm install -g eas-cli | Out-Host
 Ok "Done."
 
+function Fail($msg) {
+  Write-Host ""
+  Write-Host "    $msg" -ForegroundColor Red
+  Write-Host "    Nothing was lost. Copy this red text to Claude." -ForegroundColor Red
+  throw "Setup stopped."
+}
+
 Step "Downloading the Gamenite code"
 if (Test-Path (Join-Path $Target '.git')) {
-  Ok "Already downloaded at $Target. Pulling latest changes."
-  git -C $Target pull origin $Branch | Out-Host
+  Ok "Already downloaded at $Target. Getting the latest version."
+  git -C $Target fetch origin $Branch | Out-Host
+  if ($LASTEXITCODE -ne 0) { Fail "Could not reach GitHub to download the update. Check the internet connection and run this again." }
+
+  # Tools rewrite a few generated files on this PC (npm rewrites
+  # package-lock.json), which would block the update. Put any such local
+  # edits aside in a stash (recoverable, nothing is deleted), then update.
+  # Secret files like .env.development.local are ignored by git and never touched.
+  $changed = git -C $Target status --porcelain --untracked-files=no
+  if ($changed) {
+    Warn "Setting aside local changes to generated files:"
+    $changed | ForEach-Object { Warn "  $_" }
+    git -C $Target -c user.name=gamenite-setup -c user.email=setup@plamenite.app stash push -m "setup script: local changes set aside" | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "Could not set aside local changes before updating." }
+  }
+
+  git -C $Target merge --ff-only "origin/$Branch" | Out-Host
+  if ($LASTEXITCODE -ne 0) { Fail "Could not apply the update (the local copy has changes of its own)." }
 } else {
   New-Item -ItemType Directory -Force -Path (Split-Path $Target) | Out-Null
   git clone --branch $Branch $RepoUrl $Target | Out-Host
+  if ($LASTEXITCODE -ne 0) { Fail "Could not download the project from GitHub." }
   Ok "Downloaded to $Target"
 }
+
+# Prove it: this PC must now match the latest version on GitHub.
+$local  = git -C $Target rev-parse HEAD
+$remote = git -C $Target rev-parse "origin/$Branch"
+if ($local -ne $remote) { Fail "This PC still has an older version than GitHub." }
+$version = git -C $Target log -1 --format="%h %s"
+Ok "Up to date: $version"
 
 Step "Installing the project's packages (this is the slow part, 2-5 minutes)"
 Push-Location $Target
 try {
   npm install --no-audit --no-fund | Out-Host
+  if ($LASTEXITCODE -ne 0) { Fail "Installing packages failed." }
+  # npm may rewrite the lock file; restore it so the next update is clean.
+  git checkout -q -- package-lock.json | Out-Host
 } finally {
   Pop-Location
 }
@@ -111,7 +145,7 @@ Ok "Done."
 
 if ($Slim) {
   Step "Slim mode: clearing the npm download cache to free disk space"
-  npm cache clean --force 2>$null | Out-Host
+  npm cache clean --force | Out-Host
   Ok "Done."
 }
 

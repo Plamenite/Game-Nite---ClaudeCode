@@ -52,13 +52,13 @@
   meters minutes (60/day PLACEHOLDER); controls built, engine stub until Agora.
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
-- `apps/mobile` Expo SDK 57 app; `apps/server` Colyseus 0.18; `packages/game-rules`
-  shared TS contracts + rules used by BOTH (ESM).
+- `apps/mobile` Expo SDK 57; `apps/server` Colyseus 0.18; `packages/game-rules` shared.
 - Dev resolves the shared package to SOURCE via tsconfig `paths` (server: tsx
   watch; app: Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`); prod
   server uses `dist/` (root `postinstall`). `apps/mobile/expo-env.d.ts` is committed.
   Root: `npm run mobile|server|test|typecheck` (CI: last two). Windows:
-  `scripts/setup-windows.ps1` (`GAMENITE_SLIM=1`).
+  `scripts/setup-windows.ps1`; re-running it IS the update (stashes npm's lock
+  rewrite, ff-only, proves PC = GitHub). Never `2>$null` a native cmd in PS 5.1.
 - Five Row LIVE: engine `game-rules/src/fiverow-*.ts` (own board, never
   regenerate), `FiveRowRoom` (private hands, crypto RNG, 30 s turns, timeout →
   random move, 3 in a row → abandoned), board `components/fiverow-board.tsx`.
@@ -91,8 +91,8 @@
 - Gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`. Room tests
   share ONE booted server. `client.leave(code)` hits `onDrop` first: skip
   `allowReconnection` for own codes. Shell: absolute paths. CJS packages (agora-token):
-  default import only; CI boots the server. Local secrets: `.env.development.local`.
-  SQL: migrations append-only once applied; functions service-role only (lock_down).
+  default import only; CI boots the server. Local secrets `.env.development.local`;
+  SQL migrations append-only once applied; functions service-role only (lock_down).
 
 ## 7. Project conventions
 - Founder: Windows PC daily; MacBook Air for Xcode. Branch `claude/modest-gates-unuglw`.

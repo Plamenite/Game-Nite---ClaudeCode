@@ -87,6 +87,11 @@ players at the same entry, friends stay partners, and a table with other
 players at it is one deal with a rematch vote. On your own, the lounge
 offers **Play now with other players** in every format.
 
+**Getting updates:** run the same setup one-liner again. It downloads the
+latest version, sets aside any files the tools rewrote on your PC, and ends
+by printing "Up to date:" with the latest change. If it prints red text
+instead, copy it to Claude.
+
 Low on disk space? Use slim setup: it skips VS Code and clears the npm cache.
 
 ```powershell
