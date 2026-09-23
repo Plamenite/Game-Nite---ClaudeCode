@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LOUNGE_CODE_ALPHABET, ME_ROUTE, type MeSnapshot } from '@gamenite/game-rules';
 import type { User } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
@@ -28,7 +29,21 @@ let listening = false;
 
 WebBrowser.maybeCompleteAuthSession();
 
-export const socialSignInAvailable = supabaseConfigured;
+/**
+ * Expo Go is Expo's shared test app. It cannot receive the sign-in return
+ * address (gamenite://...) and lacks Apple's native button, so Facebook,
+ * Google and Apple only work in Gamenite's own builds. Guests work in both.
+ */
+export const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+export const socialSignInAvailable = supabaseConfigured && !inExpoGo;
+
+/** Why the Facebook, Google and Apple buttons are off, or null when they work. */
+export const socialSignInNote: string | null = !supabaseConfigured
+  ? 'Facebook, Google and Apple sign-in switch on once the accounts exist. Guests keep their coins on this phone.'
+  : inExpoGo
+    ? 'In Expo Go, play as a guest. Facebook, Google and Apple sign-in work in the Gamenite test build.'
+    : null;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -115,8 +130,8 @@ export async function continueAsGuest() {
  */
 export async function signInWith(provider: Exclude<SignInProvider, 'guest'>) {
   const supabase = getSupabase();
-  if (!supabase) {
-    patchSession({ error: 'Facebook, Google and Apple sign-in switch on once the accounts in docs/ACCOUNTS.md exist. Continue as a guest for now.' });
+  if (!supabase || !socialSignInAvailable) {
+    patchSession({ error: socialSignInNote });
     return;
   }
   patchSession({ busy: true, error: null });

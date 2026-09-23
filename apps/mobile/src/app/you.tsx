@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { setName, signInWith, signOut, socialSignInAvailable } from '@/lib/auth';
+import { setName, signInWith, signOut, socialSignInAvailable, socialSignInNote } from '@/lib/auth';
 import { useSession } from '@/lib/session';
 
 const PROVIDER_LABEL = { facebook: 'Facebook', google: 'Google', apple: 'Apple', guest: 'a guest' } as const;
@@ -75,9 +75,9 @@ export default function YouScreen() {
                 <Small label="Google" onPress={() => void signInWith('google')} disabled={!socialSignInAvailable || session.busy} />
                 <Small label="Apple" onPress={() => void signInWith('apple')} disabled={!socialSignInAvailable || session.busy} />
               </View>
-              {!socialSignInAvailable ? (
+              {socialSignInNote ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Available once the accounts in docs/ACCOUNTS.md exist.
+                  {socialSignInNote}
                 </ThemedText>
               ) : null}
             </>

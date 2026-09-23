@@ -1,12 +1,12 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedIcon } from '@/components/animated-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { continueAsGuest, signInWith, socialSignInAvailable } from '@/lib/auth';
+import { continueAsGuest, signInWith, socialSignInAvailable, socialSignInNote } from '@/lib/auth';
 import { useSession } from '@/lib/session';
 
 /**
@@ -17,6 +17,8 @@ import { useSession } from '@/lib/session';
 export function SignInScreen() {
   const session = useSession();
   const busy = session.busy;
+  // Apple's rules: a white button on dark backgrounds, black on light ones.
+  const dark = useColorScheme() === 'dark';
 
   return (
     <ThemedView style={styles.container}>
@@ -37,7 +39,7 @@ export function SignInScreen() {
           {Platform.OS === 'ios' && socialSignInAvailable ? (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              buttonStyle={dark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
               cornerRadius={Spacing.three}
               style={styles.apple}
               onPress={() => void signInWith('apple')}
@@ -52,9 +54,9 @@ export function SignInScreen() {
           </Pressable>
         </View>
 
-        {!socialSignInAvailable ? (
+        {socialSignInNote ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-            Facebook, Google and Apple sign-in switch on once the accounts exist. Guests keep their coins on this phone.
+            {socialSignInNote}
           </ThemedText>
         ) : null}
         {session.error ? (
@@ -85,8 +87,9 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, maxWidth: MaxContentWidth, paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.three, alignItems: 'center' },
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.three },
   buttons: { alignSelf: 'stretch', gap: Spacing.two },
-  button: { alignItems: 'center', paddingVertical: Spacing.three, borderRadius: Spacing.three, height: 44, justifyContent: 'center' },
-  apple: { alignSelf: 'stretch', height: 44 },
+  // At least 44 points tall (Apple's minimum touch size); the text sets the rest.
+  button: { alignItems: 'center', justifyContent: 'center', minHeight: 48, paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Spacing.three },
+  apple: { alignSelf: 'stretch', height: 48 },
   guest: { alignItems: 'center', paddingVertical: Spacing.two },
   center: { textAlign: 'center' },
   pressed: { opacity: 0.7 },

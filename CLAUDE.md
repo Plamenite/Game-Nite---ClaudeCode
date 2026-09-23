@@ -34,9 +34,8 @@
   ready; check every dependency for iOS. Android is second, never a compromise.
 
 ## 5. Tech stack — DECIDED with the founder on 2026-09-22
-- Frontend: **React Native + Expo (TypeScript)**, one codebase for iOS now and
-  Android soon; EAS builds iOS in the cloud. Bundle id `app.plamenite.gamenite`,
-  domain plamenite.app. Undecided: AdMob, RevenueCat.
+- Frontend: **React Native + Expo (TS)**, iOS now, Android soon; EAS cloud builds.
+  Bundle id `app.plamenite.gamenite`, plamenite.app. Undecided: AdMob, RevenueCat.
 - Game server: **Colyseus (TS)**, authoritative. Voice: **Agora** (~$0.99/1k user-min).
 - Auth/DB/storage: **Supabase**; coin ledger is SQL, server-written ONLY. Sign-in
   (DECIDED): Facebook, Google, Apple, then guest; name from the login account,
@@ -92,6 +91,7 @@
   `allowReconnection` for own codes. Shell: absolute paths. CJS packages (agora-token):
   default import only; CI boots the server. Phone = Hermes (no FinalizationRegistry,
   Buffer...): `lib/polyfills.ts` loads first; `apps/mobile/test/phone-engine.test.ts`.
+  Expo Go = guest only (`inExpoGo` in lib/auth.ts); social + Apple's button need a build.
   Local secrets `.env.development.local`; SQL migrations append-only; lock_down.
 
 ## 7. Project conventions

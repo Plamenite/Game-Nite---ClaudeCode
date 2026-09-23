@@ -143,7 +143,11 @@ Open https://supabase.com/dashboard, pick the project, then:
       with the app could call them directly and give themselves coins)
    Later database changes arrive as new numbered files; run only the new ones.
 2. **Authentication → Sign In / Providers → Anonymous sign-ins: ON.**
-   This is what "Continue as a guest" uses now.
+   It is a switch near the top of that page, in the "User Signups" box,
+   called "Allow anonymous sign-ins". Turn it on, then click **Save
+   changes** at the bottom of that box (the switch alone does not save).
+   This is what "Continue as a guest" uses; without it the app says
+   "Anonymous sign-ins are disabled".
 3. **Authentication → Sign In / Providers → Google: ON.** Client ID = the
    Web client ID above; Client Secret = from Google Cloud (SECRET, paste
    into Supabase only). Under "Authorized Client IDs" add the iOS client ID.
