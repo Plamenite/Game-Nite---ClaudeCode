@@ -90,33 +90,70 @@ Step "Installing Expo's build tool (eas-cli)"
 npm install -g eas-cli | Out-Host
 Ok "Done."
 
-function Fail($msg) {
+function Fail($msg, $details) {
   Write-Host ""
+  if ($details) { $details -split "`n" | ForEach-Object { Write-Host "    $_" -ForegroundColor Red } }
   Write-Host "    $msg" -ForegroundColor Red
-  Write-Host "    Nothing was lost. Copy this red text to Claude." -ForegroundColor Red
+  Write-Host "    Nothing was lost. Copy ALL the red text to Claude." -ForegroundColor Red
   throw "Setup stopped."
+}
+
+# Runs git in the project folder and returns its exit code and every line it
+# printed. (Windows PowerShell treats git's normal progress messages as errors
+# when captured, so error handling is relaxed just for the call.)
+function Invoke-Git {
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $lines = & git -C $Target @args 2>&1 | ForEach-Object { "$_" } |
+      Where-Object { $_ -ne 'System.Management.Automation.RemoteException' }
+    $code = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previous
+  }
+  $lines | ForEach-Object { Write-Host "      $_" }
+  [pscustomobject]@{ Code = $code; Text = ($lines -join "`n") }
 }
 
 Step "Downloading the Gamenite code"
 if (Test-Path (Join-Path $Target '.git')) {
   Ok "Already downloaded at $Target. Getting the latest version."
-  git -C $Target fetch origin $Branch | Out-Host
-  if ($LASTEXITCODE -ne 0) { Fail "Could not reach GitHub to download the update. Check the internet connection and run this again." }
 
-  # Tools rewrite a few generated files on this PC (npm rewrites
-  # package-lock.json), which would block the update. Put any such local
-  # edits aside in a stash (recoverable, nothing is deleted), then update.
-  # Secret files like .env.development.local are ignored by git and never touched.
+  # A git that crashed can leave a lock file behind that blocks every update.
+  $lock = Join-Path (Join-Path $Target '.git') 'index.lock'
+  if ((Test-Path $lock) -and ((Get-Item $lock).LastWriteTime -lt (Get-Date).AddMinutes(-5))) {
+    Warn "Removing a stale git lock file left by an earlier crash."
+    Remove-Item $lock -Force
+  }
+
+  $r = Invoke-Git fetch origin $Branch
+  if ($r.Code -ne 0) { Fail "Could not reach GitHub to download the update. Check the internet connection and run this again." $r.Text }
+
+  # This PC's copy is a mirror of GitHub: nobody edits it by hand, but tools
+  # rewrite some files (npm rewrites package-lock.json). Put any local edits
+  # aside in a stash first: recoverable, nothing is deleted. Secret files
+  # like .env.development.local are ignored by git and never touched.
   $changed = git -C $Target status --porcelain --untracked-files=no
   if ($changed) {
     Warn "Setting aside local changes to generated files:"
     $changed | ForEach-Object { Warn "  $_" }
-    git -C $Target -c user.name=gamenite-setup -c user.email=setup@plamenite.app stash push -m "setup script: local changes set aside" | Out-Host
-    if ($LASTEXITCODE -ne 0) { Fail "Could not set aside local changes before updating." }
+    $r = Invoke-Git -c user.name=gamenite-setup -c user.email=setup@plamenite.app stash push -m "setup script: local changes set aside"
+    if ($r.Code -ne 0) { Fail "Could not set aside local changes before updating." $r.Text }
   }
 
-  git -C $Target merge --ff-only "origin/$Branch" | Out-Host
-  if ($LASTEXITCODE -ne 0) { Fail "Could not apply the update (the local copy has changes of its own)." }
+  $r = Invoke-Git merge --ff-only "origin/$Branch"
+  if ($r.Code -ne 0) {
+    # The simple update did not apply. Keep whatever this PC had on a backup
+    # branch (nothing is lost), then make the copy match GitHub exactly.
+    $backup = "backup/pc-" + (Get-Date -Format 'yyyyMMdd-HHmmss')
+    Warn "The simple update did not apply; saving this PC's version as $backup and matching GitHub."
+    $r = Invoke-Git branch $backup
+    if ($r.Code -ne 0) { Fail "Could not save a backup of this PC's version." $r.Text }
+    $r = Invoke-Git checkout -f -B $Branch "origin/$Branch"
+    if ($r.Code -ne 0) {
+      Fail "Could not update the files. Close every PowerShell and VS Code window that uses the project (they can lock files), then run this again." $r.Text
+    }
+  }
 } else {
   New-Item -ItemType Directory -Force -Path (Split-Path $Target) | Out-Null
   git clone --branch $Branch $RepoUrl $Target | Out-Host

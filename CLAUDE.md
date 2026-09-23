@@ -56,8 +56,8 @@
   Dev resolves the shared package to SOURCE via tsconfig `paths` (server: tsx; app:
   Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`); prod server `dist/`.
   Root: `npm run mobile|server|test|typecheck` (CI: last two). Windows:
-  `scripts/setup-windows.ps1`; re-running it IS the update (stashes npm's lock
-  rewrite, ff-only, proves PC = GitHub). Never `2>$null` a native cmd in PS 5.1.
+  `scripts/setup-windows.ps1`; re-running it IS the update (stash, ff-only, else
+  backup branch + match GitHub; proves PC = GitHub). PS 5.1: native stderr + Stop = throw.
 - Five Row LIVE: engine `game-rules/src/fiverow-*.ts` (own board, never
   regenerate), `FiveRowRoom` (private hands, crypto RNG, 30 s turns, timeout →
   random move, 3 in a row → abandoned), board `components/fiverow-board.tsx`.
