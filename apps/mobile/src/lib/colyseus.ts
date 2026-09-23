@@ -1,3 +1,4 @@
+import '@/lib/polyfills';
 import { Client } from '@colyseus/sdk';
 
 import { getServerUrl } from '@/lib/server-url';

@@ -1,4 +1,4 @@
-import { type Room, type SeatReservation } from '@colyseus/sdk';
+import type { Room, SeatReservation } from '@colyseus/sdk';
 import {
   LOUNGE_EVENTS,
   LOUNGE_MESSAGES,

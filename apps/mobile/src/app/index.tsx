@@ -1,4 +1,4 @@
-import { type SeatReservation } from '@colyseus/sdk';
+import type { SeatReservation } from '@colyseus/sdk';
 import {
   COURT_PIECE_PRIVATE_BEST_OF,
   COURT_PIECE_VARIANTS,

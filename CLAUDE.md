@@ -53,9 +53,8 @@
 
 ## 6. Repo layout (one repo, npm workspaces) and how it is wired
 - `apps/mobile` Expo SDK 57; `apps/server` Colyseus 0.18; `packages/game-rules` shared.
-- Dev resolves the shared package to SOURCE via tsconfig `paths` (server: tsx
-  watch; app: Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`); prod
-  server uses `dist/` (root `postinstall`). `apps/mobile/expo-env.d.ts` is committed.
+  Dev resolves the shared package to SOURCE via tsconfig `paths` (server: tsx; app:
+  Metro `metro.config.js` maps `.js`→`.ts`, stubs Node-only `ws`); prod server `dist/`.
   Root: `npm run mobile|server|test|typecheck` (CI: last two). Windows:
   `scripts/setup-windows.ps1`; re-running it IS the update (stashes npm's lock
   rewrite, ff-only, proves PC = GitHub). Never `2>$null` a native cmd in PS 5.1.
@@ -91,8 +90,9 @@
 - Gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`. Room tests
   share ONE booted server. `client.leave(code)` hits `onDrop` first: skip
   `allowReconnection` for own codes. Shell: absolute paths. CJS packages (agora-token):
-  default import only; CI boots the server. Local secrets `.env.development.local`;
-  SQL migrations append-only once applied; functions service-role only (lock_down).
+  default import only; CI boots the server. Phone = Hermes (no FinalizationRegistry,
+  Buffer...): `lib/polyfills.ts` loads first; `apps/mobile/test/phone-engine.test.ts`.
+  Local secrets `.env.development.local`; SQL migrations append-only; lock_down.
 
 ## 7. Project conventions
 - Founder: Windows PC daily; MacBook Air for Xcode. Branch `claude/modest-gates-unuglw`.

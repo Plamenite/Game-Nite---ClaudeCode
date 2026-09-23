@@ -1,3 +1,5 @@
+// Must stay the first import: engine features some libraries expect.
+import '@/lib/polyfills';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
