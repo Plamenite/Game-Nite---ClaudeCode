@@ -116,7 +116,8 @@ before the app can be listed; Meta needs the first and the third.
 
 All received on 2026-09-23 and recorded in the repo (public values only):
 
-- Expo username: `plamenite` (`apps/mobile/app.json` owner)
+- Expo username: `plamenite` (`apps/mobile/app.json` owner); EAS Project ID
+  `cbed3490-d61d-4d3d-b1bf-093111a20469`
 - Apple Team ID: `2Z3295J6DG` (`apps/mobile/app.json`, `apps/mobile/eas.json`)
 - Supabase Project URL `https://aimmofpruwznsidtxcyt.supabase.co` and the
   publishable key (`apps/mobile/.env.development`, `.env.production`,
@@ -169,6 +170,11 @@ Open https://supabase.com/dashboard, pick the project, then:
 2. Projects → **Create a project**. Name it `gamenite`, slug `gamenite`.
 3. It shows a **Project ID** (letters, numbers and dashes). Send that to
    Claude, who records it in `apps/mobile/app.json`.
+
+Done 2026-09-23: Project ID `cbed3490-d61d-4d3d-b1bf-093111a20469`, recorded
+as `extra.eas.projectId`. The website also suggests a command starting with
+`npm install --global eas-cli && npx create-expo-app gamenite`. Do not run it:
+it creates a second, empty app. Ours already exists in `apps/mobile`.
 
 (Please do not run `eas init` on your PC: it edits `app.json` locally, and
 that local edit blocks the setup script from pulling later updates.)
