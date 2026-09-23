@@ -101,6 +101,11 @@ Send Claude: the App ID. Keep the App Secret in Supabase only.
 Send Claude: the App ID. The App Certificate goes into the game server's
 hosting environment settings later, never into chat or git.
 
+### Wiring voice once Agora exists
+`AGORA_APP_ID` (public) and `AGORA_APP_CERTIFICATE` (SECRET) go into the
+server's environment; the server then mints channel tickets. See
+`docs/VOICE.md` for what the phone still needs (the native SDK build).
+
 ## 7. Domain plamenite.app — required by Apple and Meta
 
 Buy `plamenite.app` at any registrar. Claude will publish three small pages

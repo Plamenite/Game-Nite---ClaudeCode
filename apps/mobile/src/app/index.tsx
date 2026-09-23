@@ -10,14 +10,16 @@ import {
   isTeamGame,
   type LoungeSnapshot,
 } from '@gamenite/game-rules';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CourtPieceTable } from '@/components/court-piece-table';
 import { FiveRowBoard, TEAM_COLORS } from '@/components/fiverow-board';
+import { ShortOnCoins } from '@/components/short-on-coins';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { VoiceBar } from '@/components/voice-bar';
 import { WalletCard } from '@/components/wallet-card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useCourtPiece } from '@/hooks/use-court-piece';
@@ -25,6 +27,7 @@ import { useFiveRow } from '@/hooks/use-fiverow';
 import { useLounge } from '@/hooks/use-lounge';
 import { useTheme } from '@/hooks/use-theme';
 import { takeKnock, usePendingKnock } from '@/lib/intents';
+import { loadMuted } from '@/lib/voice';
 
 /**
  * The first screen: your lounge (PUBG style). You land in it, friends knock
@@ -65,13 +68,19 @@ export default function LoungeScreen() {
     }
   }, [pendingKnock, loungeStatus, knock]);
 
+  useEffect(() => {
+    void loadMuted();
+  }, []);
+
   const atTable = table.status === 'seated' || table.status === 'connecting';
   const atCards = cards.status === 'seated' || cards.status === 'connecting';
+  // The lounge's voice carries into the match: same strip above the table.
+  const voice = lounge.snapshot && lounge.status === 'in_lounge' ? <VoiceBar members={lounge.snapshot.members} mySessionId={lounge.sessionId} onMic={lounge.setMic} /> : null;
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        {atCards ? <CourtPieceView cards={cards} /> : atTable ? <GameView table={table} /> : <LoungeView lounge={lounge} table={table} cards={cards} />}
+        {atCards ? <CourtPieceView cards={cards} voice={voice} /> : atTable ? <GameView table={table} voice={voice} /> : <LoungeView lounge={lounge} table={table} cards={cards} voice={voice} />}
       </SafeAreaView>
     </ThemedView>
   );
@@ -83,10 +92,12 @@ function LoungeView({
   lounge,
   table,
   cards,
+  voice,
 }: {
   lounge: ReturnType<typeof useLounge>;
   table: ReturnType<typeof useFiveRow>;
   cards: ReturnType<typeof useCourtPiece>;
+  voice: React.ReactNode;
 }) {
   const snap = lounge.snapshot;
   const me = snap?.members.find((m) => m.sessionId === lounge.sessionId);
@@ -123,7 +134,9 @@ function LoungeView({
       ) : null}
 
       {lounge.notice ? <ThemedText type="small">{lounge.notice}</ThemedText> : null}
+      <ShortOnCoins message={lounge.notice} />
       {error && lounge.status !== 'error' ? <ThemedText type="small">{error}</ThemedText> : null}
+      <ShortOnCoins message={error} />
 
       {snap && lounge.status === 'in_lounge' ? (
         <>
@@ -137,6 +150,7 @@ function LoungeView({
             </ThemedText>
           </ThemedView>
 
+          {voice}
           <Seats snap={snap} mySessionId={lounge.sessionId} isLeader={isLeader} starting={starting} lounge={lounge} />
 
           {snap.requests.length > 0 ? (
@@ -409,7 +423,7 @@ function Choice({ label, selected, onPress }: { label: string; selected: boolean
 
 // ---------------------------------------------------------------- court piece
 
-function CourtPieceView({ cards }: { cards: ReturnType<typeof useCourtPiece> }) {
+function CourtPieceView({ cards, voice }: { cards: ReturnType<typeof useCourtPiece>; voice: React.ReactNode }) {
   const { status, snapshot, hand, error, notice, sessionId, clockOffset, play, rematch, leave } = cards;
   const doLeave = () => void leave();
   if (status === 'connecting' || !snapshot) {
@@ -426,6 +440,7 @@ function CourtPieceView({ cards }: { cards: ReturnType<typeof useCourtPiece> }) 
   }
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {voice}
       {error ? <ThemedText type="small">{error}</ThemedText> : null}
       <CourtPieceTable snapshot={snapshot} hand={hand} mySessionId={sessionId} clockOffset={clockOffset} notice={notice} onPlay={play} onRematch={rematch} onLeave={doLeave} />
     </ScrollView>
@@ -434,7 +449,7 @@ function CourtPieceView({ cards }: { cards: ReturnType<typeof useCourtPiece> }) 
 
 // ---------------------------------------------------------------- five row
 
-function GameView({ table }: { table: ReturnType<typeof useFiveRow> }) {
+function GameView({ table, voice }: { table: ReturnType<typeof useFiveRow>; voice: React.ReactNode }) {
   const { status, snapshot, hand, error, notice, sessionId, clockOffset, sendMove, pass, leave } = table;
   const doLeave = () => void leave();
 
@@ -453,6 +468,7 @@ function GameView({ table }: { table: ReturnType<typeof useFiveRow> }) {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {voice}
       {error ? <ThemedText type="small">{error}</ThemedText> : null}
       <FiveRowBoard snapshot={snapshot} hand={hand} mySessionId={sessionId} clockOffset={clockOffset} notice={notice} onMove={sendMove} onPass={pass} onLeave={doLeave} />
     </ScrollView>

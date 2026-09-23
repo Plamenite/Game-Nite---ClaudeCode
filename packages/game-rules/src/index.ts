@@ -16,3 +16,4 @@ export * from './economy.js';
 export * from './wallet.js';
 export * from './lounge.js';
 export * from './friends.js';
+export * from './voice.js';

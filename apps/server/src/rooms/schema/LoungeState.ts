@@ -6,6 +6,10 @@ export const LoungeMember = schema({
   ready: t.boolean().default(false),
   /** 0 or 1. Alternates on join; the leader can change it. */
   team: t.uint8().default(0),
+  /** Voice: their mic is on. */
+  mic: t.boolean().default(false),
+  /** Their player code: phones mute people for themselves by it. */
+  playerCode: t.string().default(""),
 });
 export type LoungeMember = SchemaType<typeof LoungeMember>;
 

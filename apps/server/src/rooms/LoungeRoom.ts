@@ -10,6 +10,10 @@ import {
   LOUNGE_REQUEST_TIMEOUT_SECONDS,
   LOUNGE_SIZE,
   ROOMS,
+  VOICE_EVENTS,
+  VOICE_FREE_MINUTES_PER_DAY,
+  VOICE_MESSAGES,
+  voiceUidFor,
   canStartLounge,
   fiverowConfigForPlayers,
   isLoungeFormat,
@@ -23,7 +27,11 @@ import { authenticate, type PlayerAuth } from "../auth.js";
 import { LAUNCH_SECRET } from "../launch.js";
 import { getLedger } from "../ledger.js";
 import * as presence from "../presence.js";
+import { getVoice } from "../voice-provider.js";
 import { resolveName } from "./names.js";
+
+/** How often mic-on time is written down and checked against the allowance. */
+const VOICE_METER_MS = 60_000;
 import { LoungeMember, LoungeRequest, LoungeState } from "./schema/LoungeState.js";
 
 /** How long a knock waits; tests shorten it with LOUNGE_KNOCK_SECONDS. */
@@ -58,6 +66,10 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
   private doorTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** userId per sessionId, for friendship checks and presence. */
   private userOf = new Map<string, string>();
+  /** player code per sessionId (voice uids and mute-for-me use it). */
+  private codeOf = new Map<string, string>();
+  /** When each member's mic went on, for metering. */
+  private micSince = new Map<string, number>();
 
   messages = {
     [LOUNGE_MESSAGES.setReady]: async (client: Client, message: { ready?: boolean } | undefined) => {
@@ -141,6 +153,28 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     [LOUNGE_MESSAGES.start]: async (client: Client) => {
       await this.start(client);
     },
+
+    [VOICE_MESSAGES.setMic]: async (client: Client, payload: { on?: boolean } | undefined) => {
+      const member = this.state.members.get(client.sessionId);
+      if (!member) return this.refuse(client, "Only people in the lounge can talk.");
+      const on = Boolean(payload?.on);
+      if (!on) return this.micOff(client.sessionId);
+      if (member.mic) return;
+      const userId = this.userOf.get(client.sessionId) ?? "";
+      const used = await getLedger().voiceSecondsToday(userId);
+      if (used >= VOICE_FREE_MINUTES_PER_DAY * 60) {
+        return this.refuse(client, "Your free voice minutes for today are used up.");
+      }
+      member.mic = true;
+      this.micSince.set(client.sessionId, Date.now());
+    },
+
+    [VOICE_MESSAGES.joinVoice]: (client: Client) => {
+      if (!this.state.members.has(client.sessionId)) return this.refuse(client, "Only people in the lounge can talk.");
+      if (!getVoice().configured) return this.refuse(client, "Voice is not set up yet.");
+      const code = this.codeOf.get(client.sessionId) ?? "";
+      client.send(VOICE_EVENTS.token, getVoice().ticket(this.state.code, voiceUidFor(code)));
+    },
   };
 
   static onAuth = authenticate;
@@ -151,6 +185,10 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     this.state.code = code;
     // Metadata is what join-by-code filters on (see app.config.ts).
     await this.setMetadata({ code });
+    // Voice is metered by the server: write down mic-on time regularly.
+    this.clock.setInterval((): void => {
+      void this.meterVoice();
+    }, VOICE_METER_MS);
   }
 
   async onJoin(client: Client, options: LoungeJoinOptions) {
@@ -161,8 +199,10 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     }
     // First sight creates the profile (wallet, starting coins, name).
     const name = await resolveName(auth, options?.name);
-    const isOwner = (await getLedger().playerCode(userId)) === this.state.code;
+    const myCode = await getLedger().playerCode(userId);
+    const isOwner = myCode === this.state.code;
     this.userOf.set(client.sessionId, userId);
+    this.codeOf.set(client.sessionId, myCode);
 
     if (this.state.members.size === 0 && !isOwner) {
       throw new ServerError(403, "Only the owner can open this lounge.");
@@ -194,9 +234,11 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
   onLeave(client: Client, _code: CloseCode) {
     this.forget(client.sessionId);
     if (this.state.members.has(client.sessionId)) {
+      this.micOff(client.sessionId);
       presence.exit(this.userOf.get(client.sessionId) ?? "", `lounge:${this.state.code}`);
     }
     this.userOf.delete(client.sessionId);
+    this.codeOf.delete(client.sessionId);
     this.state.members.delete(client.sessionId);
 
     if (this.state.leaderSessionId === client.sessionId) {
@@ -237,12 +279,42 @@ export class LoungeRoom extends Room<{ state: LoungeState; metadata: { code: str
     const member = new LoungeMember();
     member.name = name;
     member.team = this.state.members.size % 2; // alternate sides; the leader can change it
+    member.playerCode = this.codeOf.get(client.sessionId) ?? "";
     this.state.members.set(client.sessionId, member);
     if (!this.state.leaderSessionId || !this.state.members.has(this.state.leaderSessionId)) {
       this.state.leaderSessionId = client.sessionId;
     }
     presence.enter(this.userOf.get(client.sessionId) ?? "", `lounge:${this.state.code}`);
     console.log("lounge", this.state.code, "+", name, this.state.leaderSessionId === client.sessionId ? "(leader)" : "");
+  }
+
+  /** Mic off: write down the seconds it was on. Safe to call when it was already off. */
+  private micOff(sessionId: string) {
+    const member = this.state.members.get(sessionId);
+    const since = this.micSince.get(sessionId);
+    if (member) member.mic = false;
+    this.micSince.delete(sessionId);
+    if (since !== undefined) {
+      const seconds = Math.max(1, Math.round((Date.now() - since) / 1000));
+      void getLedger().addVoiceSeconds(this.userOf.get(sessionId) ?? "", seconds).catch((e) => console.error("voice metering failed", e));
+    }
+  }
+
+  /** Every minute: bank the time so far and switch off anyone past the day's allowance. */
+  private async meterVoice() {
+    for (const [sessionId, since] of [...this.micSince.entries()]) {
+      const userId = this.userOf.get(sessionId) ?? "";
+      const seconds = Math.round((Date.now() - since) / 1000);
+      this.micSince.set(sessionId, Date.now());
+      const total = await getLedger().addVoiceSeconds(userId, seconds).catch(() => 0);
+      if (total >= VOICE_FREE_MINUTES_PER_DAY * 60) {
+        this.micSince.delete(sessionId);
+        const member = this.state.members.get(sessionId);
+        if (member) member.mic = false;
+        const client = this.clients.find((c) => c.sessionId === sessionId);
+        if (client) this.refuse(client, "Your free voice minutes for today are used up.");
+      }
+    }
   }
 
   private closeDoor(client: Client, code: number) {

@@ -12,6 +12,7 @@ import {
   toCourtPieceSnapshot,
   toFiveRowSnapshot,
   toLoungeSnapshot,
+  voiceUidFor,
   type Card,
   type FiveRowMove,
 } from "@gamenite/game-rules";
@@ -19,6 +20,7 @@ import {
 import appConfig from "../src/app.config.js";
 import { configureAuth } from "../src/auth.js";
 import { MemoryLedger, getLedger, setLedger } from "../src/ledger.js";
+import { AgoraVoiceProvider, NullVoiceProvider, setVoice } from "../src/voice-provider.js";
 import { CourtPieceState } from "../src/rooms/schema/CourtPieceState.js";
 import { FiveRowState } from "../src/rooms/schema/FiveRowState.js";
 import { LoungeState } from "../src/rooms/schema/LoungeState.js";
@@ -569,6 +571,60 @@ describe("LoungeRoom (where friends gather)", () => {
     lists = (await http.post("/friends/remove", { body: { code: fb.playerCode } })).data as any;
     assert.deepStrictEqual(lists, { friends: [], incoming: [], outgoing: [] });
     as("guest-TEST");
+  });
+
+  it("voice: mics are visible to everyone and metered; the day's allowance stops them; tickets come once Agora is set up", async () => {
+    const { lounge, code, leader, others } = await gather("Zain", ["Ali"]);
+    const [ali] = others;
+    assert.strictEqual(lounge.state.members.get(ali.sessionId).playerCode, await getLedger().playerCode("guest-ali"));
+
+    ali.send("set_mic", { on: true });
+    await lounge.waitForMessage("set_mic");
+    await lounge.waitForNextPatch();
+    assert.strictEqual(lounge.state.members.get(ali.sessionId).mic, true);
+    assert.strictEqual(toLoungeSnapshot(leader.state).members.find((m) => m.name === "Ali")?.mic, true, "everyone sees it");
+    ali.send("set_mic", { on: false });
+    await lounge.waitForMessage("set_mic");
+    await waitFor(() => lounge.state.members.get(ali.sessionId).mic === false, 2000, "mic off");
+    await waitFor(() => true, 20);
+    assert.ok((await getLedger().voiceSecondsToday("guest-ali")) >= 1, "the seconds were written down");
+
+    // Zain has used the whole day's allowance elsewhere.
+    await getLedger().addVoiceSeconds("guest-zain", 60 * 60);
+    let refused = nextMessage<{ reason: string }>(leader, "refused");
+    leader.send("set_mic", { on: true });
+    assert.match((await refused).reason, /free voice minutes/i);
+    assert.strictEqual(lounge.state.members.get(leader.sessionId).mic, false);
+
+    // No Agora account yet: honest refusal.
+    setVoice(new NullVoiceProvider());
+    refused = nextMessage<{ reason: string }>(ali, "refused");
+    ali.send("join_voice", {});
+    assert.match((await refused).reason, /not set up/i);
+
+    // With Agora configured, a member gets a ticket for the lounge's own channel.
+    // Agora ids and certificates are 32 characters; the library refuses anything else.
+    const appId = "a".repeat(32);
+    setVoice(new AgoraVoiceProvider(appId, "c".repeat(32)));
+    try {
+      const ticket = nextMessage<any>(ali, "voice_token");
+      ali.send("join_voice", {});
+      const t = await ticket;
+      assert.strictEqual(t.appId, appId);
+      assert.strictEqual(t.channel, code);
+      assert.strictEqual(t.uid, voiceUidFor(await getLedger().playerCode("guest-ali")));
+      assert.ok(typeof t.token === "string" && t.token.length > 20);
+      assert.ok(t.expiresAt > Date.now() / 1000);
+
+      // Someone at the door has no seat and no voice.
+      await befriend("guest-zain", "guest-door");
+      const door = await knock(code, "guest-door", "Door");
+      refused = nextMessage<{ reason: string }>(door, "refused");
+      door.send("join_voice", {});
+      assert.match((await refused).reason, /in the lounge/i);
+    } finally {
+      setVoice(new NullVoiceProvider());
+    }
   });
 
   it("/me tells a phone its player code (its lounge code) and its name, which it can change", async () => {

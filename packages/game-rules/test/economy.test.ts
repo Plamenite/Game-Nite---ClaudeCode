@@ -15,6 +15,7 @@ import {
   netForPlayer,
   previousUtcDay,
   settleTable,
+  shortfallFromMessage,
 } from '../src/economy.js';
 
 test('the agreed numbers', () => {
@@ -114,4 +115,11 @@ test('a streak continues from yesterday, waits when claimed today, and restarts 
   assert.deepEqual(dailyBonusStatus('2026-09-22', 4, '2026-09-22'), { claimedToday: true, streakDay: 4, coins: 350 });
   assert.deepEqual(dailyBonusStatus('2026-09-20', 6, '2026-09-22'), { claimedToday: false, streakDay: 1, coins: 200 }, 'missed a day');
   assert.deepEqual(dailyBonusStatus('2026-09-21', 9, '2026-09-22'), { claimedToday: false, streakDay: 10, coins: 500 }, 'long streaks keep counting at the cap');
+});
+
+test('the shortfall is read back out of the refusal message', () => {
+  assert.equal(shortfallFromMessage('You need 500 coins for this table. You have 300.'), 200);
+  assert.equal(shortfallFromMessage('You need 10,000 coins for this table. You have 1,450.'), 8550);
+  assert.equal(shortfallFromMessage('Only the leader can start.'), null);
+  assert.equal(shortfallFromMessage(null), null);
 });

@@ -165,6 +165,10 @@ export interface LoungeMemberSnapshot {
   isLeader: boolean;
   /** 0 or 1. Assigned alternately on join; the leader can change it. */
   team: number;
+  /** Their mic is on (voice). */
+  mic: boolean;
+  /** Their player code, so a phone can mute them for itself, and keep that across sessions. */
+  playerCode: string;
 }
 
 /** Someone at the door, waiting for a member to let them in. */
@@ -204,7 +208,7 @@ export interface LoungeStateLike {
   bestOf: number;
   entry: number;
   members: {
-    forEach(cb: (member: { name: string; ready: boolean; team: number }, sessionId: string) => void): void;
+    forEach(cb: (member: { name: string; ready: boolean; team: number; mic?: boolean; playerCode?: string }, sessionId: string) => void): void;
   };
   requests: {
     forEach(cb: (request: { name: string }, sessionId: string) => void): void;
@@ -283,6 +287,8 @@ export function toLoungeSnapshot(state: LoungeStateLike): LoungeSnapshot {
       ready: member.ready,
       isLeader: sessionId === state.leaderSessionId,
       team: member.team,
+      mic: member.mic ?? false,
+      playerCode: member.playerCode ?? '',
     });
   });
   const requests: LoungeRequestSnapshot[] = [];

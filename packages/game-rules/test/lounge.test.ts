@@ -104,8 +104,8 @@ test('toLoungeSnapshot marks the leader, lists who is at the door, and counts em
   const requests = new Map([['R', { name: 'Ali' }]]);
   const snap = toLoungeSnapshot({ code: 'K7PM3XAB', leaderSessionId: 'L', status: 'open', game: 'fiverow', players: 2, variant: 'single_siri', bestOf: 1, entry: 500, members, requests });
   assert.deepEqual(snap.members, [
-    { sessionId: 'L', name: 'Zain', ready: true, isLeader: true, team: 0 },
-    { sessionId: 'M', name: 'Friend', ready: true, isLeader: false, team: 1 },
+    { sessionId: 'L', name: 'Zain', ready: true, isLeader: true, team: 0, mic: false, playerCode: '' },
+    { sessionId: 'M', name: 'Friend', ready: true, isLeader: false, team: 1, mic: false, playerCode: '' },
   ]);
   assert.deepEqual(snap.requests, [{ sessionId: 'R', name: 'Ali' }]);
   assert.equal(snap.canStart, true);

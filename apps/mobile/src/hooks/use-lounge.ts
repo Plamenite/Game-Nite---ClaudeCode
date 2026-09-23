@@ -4,6 +4,8 @@ import {
   LOUNGE_MESSAGES,
   ME_ROUTE,
   ROOMS,
+  VOICE_EVENTS,
+  VOICE_MESSAGES,
   loungeJoinOptions,
   loungeLeaveReason,
   normalizeLoungeCode,
@@ -12,11 +14,13 @@ import {
   type LoungeSnapshot,
   type LoungeStateLike,
   type MeSnapshot,
+  type VoiceTicket,
 } from '@gamenite/game-rules';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getClient } from '@/lib/colyseus';
 import { getSession, patchSession } from '@/lib/session';
+import { joinChannel, leaveChannel, patchVoice, setMicLocal } from '@/lib/voice';
 
 /**
  * idle        not connected to any lounge
@@ -52,6 +56,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
     setStatus('idle');
     setSnapshot(null);
     setSessionId(null);
+    void leaveChannel();
   }, []);
 
   const attach = useCallback(
@@ -69,6 +74,7 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
       });
       room.onMessage(LOUNGE_EVENTS.refused, (payload: { reason?: string }) => setNotice(payload?.reason ?? 'Request refused'));
       room.onMessage(LOUNGE_EVENTS.tableReady, (reservation: SeatReservation) => onTableReadyRef.current(reservation));
+      room.onMessage(VOICE_EVENTS.token, (ticket: VoiceTicket) => void joinChannel(ticket).catch((e) => patchVoice({ notice: e instanceof Error ? e.message : String(e) })));
       room.onError((code, message) => setError(`Server error ${code}: ${message ?? ''}`));
       room.onLeave((code) => {
         if (roomRef.current !== room) return;
@@ -156,6 +162,15 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
   /** Any member: let someone at the door in, or turn them away. */
   const accept = useCallback((sessionId: string) => send(LOUNGE_MESSAGES.accept, { sessionId }), [send]);
   const decline = useCallback((sessionId: string) => send(LOUNGE_MESSAGES.decline, { sessionId }), [send]);
+  /** Voice: my mic on or off (the server meters minutes); everyone sees the state. */
+  const setMic = useCallback(
+    (on: boolean) => {
+      send(VOICE_MESSAGES.setMic, { on });
+      void setMicLocal(on);
+      if (on) send(VOICE_MESSAGES.joinVoice, {});
+    },
+    [send],
+  );
   /** Leader only. */
   const kick = useCallback((sessionId: string) => send(LOUNGE_MESSAGES.kick, { sessionId }), [send]);
   const makeLeader = useCallback((sessionId: string) => send(LOUNGE_MESSAGES.makeLeader, { sessionId }), [send]);
@@ -177,5 +192,5 @@ export function useLounge({ onTableReady }: UseLoungeOptions) {
 
   const inMyOwn = Boolean(snapshot && me && snapshot.code === me.playerCode);
 
-  return { status, snapshot, me, inMyOwn, error, notice, sessionId, enterMine, knock, setReady, start, setGame, setTeam, accept, decline, kick, makeLeader, leave };
+  return { status, snapshot, me, inMyOwn, error, notice, sessionId, enterMine, knock, setReady, start, setGame, setTeam, accept, decline, kick, makeLeader, setMic, leave };
 }

@@ -392,3 +392,39 @@ $$;
 alter table public.friendships enable row level security;
 drop policy if exists "own friendships" on public.friendships;
 create policy "own friendships" on public.friendships for select using (auth.uid() in (a, b));
+
+-- ---------------------------------------------------------------- voice minutes
+-- DECIDED: the server meters voice against a small free daily allowance
+-- (the numbers live in packages/game-rules/src/voice.ts). One row per
+-- player per UTC day; only the server writes.
+
+create table if not exists public.voice_usage (
+  user_id  uuid not null references public.profiles (id) on delete cascade,
+  day      date not null,
+  seconds  int  not null default 0 check (seconds >= 0),
+  primary key (user_id, day)
+);
+
+create or replace function public.voice_seconds_today(p_user uuid) returns int
+language sql stable as $$
+  select coalesce((select seconds from public.voice_usage where user_id = p_user and day = (now() at time zone 'UTC')::date), 0);
+$$;
+
+create or replace function public.add_voice_seconds(p_user uuid, p_seconds int) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  total int;
+begin
+  if p_seconds < 0 then
+    raise exception 'seconds must not be negative' using errcode = 'P0001';
+  end if;
+  insert into public.voice_usage (user_id, day, seconds)
+  values (p_user, (now() at time zone 'UTC')::date, p_seconds)
+  on conflict (user_id, day) do update set seconds = public.voice_usage.seconds + excluded.seconds
+  returning seconds into total;
+  return total;
+end $$;
+
+alter table public.voice_usage enable row level security;
+drop policy if exists "own voice usage" on public.voice_usage;
+create policy "own voice usage" on public.voice_usage for select using (auth.uid() = user_id);

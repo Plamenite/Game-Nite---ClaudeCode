@@ -158,6 +158,16 @@ describe("economy SQL (embedded Postgres)", function () {
     assert.strictEqual(await areFriends(U1, U2), true);
   });
 
+  it("voice minutes add up per day and never go negative", async () => {
+    const today = async (u: string) => Number((await db.query<{ s: string }>("select public.voice_seconds_today($1) as s", [u])).rows[0].s);
+    assert.strictEqual(await today(U1), 0);
+    assert.strictEqual(Number((await db.query<{ t: string }>("select public.add_voice_seconds($1, $2) as t", [U1, 90])).rows[0].t), 90);
+    assert.strictEqual(Number((await db.query<{ t: string }>("select public.add_voice_seconds($1, $2) as t", [U1, 30])).rows[0].t), 120);
+    assert.strictEqual(await today(U1), 120);
+    assert.strictEqual(await today(U2), 0, "each player has their own count");
+    await rejects(db.query("select public.add_voice_seconds($1, $2)", [U1, -5]), /negative/);
+  });
+
   it("the ledger is append-only and balances never go below zero", async () => {
     await rejects(db.query("update public.coin_ledger set amount = 999999 where user_id = $1", [U1]), /append-only/);
     await rejects(db.query("delete from public.coin_ledger where user_id = $1", [U1]), /append-only/);

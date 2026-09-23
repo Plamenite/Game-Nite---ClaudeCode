@@ -36,6 +36,7 @@
     "@colyseus/tools": "^0.18.1",
     "@gamenite/game-rules": "*",
     "@supabase/supabase-js": "^2.117.0",
+    "agora-token": "^2.0.6",
     "colyseus": "^0.18.2",
     "express": "^5.2.1",
     "jose": "^6.2.12"

@@ -143,3 +143,17 @@ export function netForPlayer(entry: number, settlement: Settlement, playerId: st
   const back = settlement.moves.filter((m) => m.playerId === playerId).reduce((sum, m) => sum + m.amount, 0);
   return back - (entry === 0 ? 0 : entry);
 }
+
+/**
+ * The server refuses a seat with "You need 500 coins for this table. You
+ * have 300." The phone turns that back into the shortfall (200) to point
+ * at the daily bonus. Null when the message is about something else.
+ */
+export function shortfallFromMessage(message: string | null | undefined): number | null {
+  if (!message) return null;
+  const match = /need ([\d,]+) coins[^.]*\. You have ([\d,]+)/i.exec(message);
+  if (!match) return null;
+  const need = Number(match[1].replace(/,/g, ''));
+  const have = Number(match[2].replace(/,/g, ''));
+  return Number.isFinite(need) && Number.isFinite(have) && need > have ? need - have : null;
+}

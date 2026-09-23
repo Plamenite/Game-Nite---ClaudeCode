@@ -69,6 +69,11 @@ export interface Ledger {
   /** Remove a friend, or withdraw a request. */
   removeFriend(userId: string, friendId: string): Promise<void>;
   areFriends(userId: string, otherId: string): Promise<boolean>;
+
+  // ---- voice (DECIDED): the server meters minutes against a daily allowance.
+  voiceSecondsToday(userId: string): Promise<number>;
+  /** Adds to today's total and returns it. */
+  addVoiceSeconds(userId: string, seconds: number): Promise<number>;
 }
 
 export class LedgerError extends Error {}
@@ -83,6 +88,7 @@ export class MemoryLedger implements Ledger {
   private names = new Map<string, string>();
   /** One entry per pair, keyed by the two ids in sorted order. */
   private pairs = new Map<string, { requestedBy: string; accepted: boolean }>();
+  private voice = new Map<string, number>(); // `${user}:${day}` -> seconds
 
   /** Tests pass a clock to walk through days. */
   constructor(private readonly clock: () => Date = () => new Date()) {}
@@ -164,6 +170,18 @@ export class MemoryLedger implements Ledger {
       if (m.amount <= 0) throw new LedgerError("settlement amounts must be positive");
       this.apply(m.playerId, m.amount, `${m.kind}:${tableId}:${m.playerId}`);
     }
+  }
+
+  async voiceSecondsToday(userId: string): Promise<number> {
+    return this.voice.get(`${userId}:${this.today()}`) ?? 0;
+  }
+
+  async addVoiceSeconds(userId: string, seconds: number): Promise<number> {
+    if (seconds < 0) throw new LedgerError("seconds must not be negative");
+    const key = `${userId}:${this.today()}`;
+    const total = (this.voice.get(key) ?? 0) + Math.round(seconds);
+    this.voice.set(key, total);
+    return total;
   }
 
   private pairKey(a: string, b: string) {
@@ -301,6 +319,12 @@ export class SupabaseLedger implements Ledger {
   }
   areFriends(userId: string, otherId: string) {
     return this.rpc<boolean>("are_friends", { p_user: userId, p_other: otherId }).then(Boolean);
+  }
+  voiceSecondsToday(userId: string) {
+    return this.rpc<number>("voice_seconds_today", { p_user: userId }).then(Number);
+  }
+  addVoiceSeconds(userId: string, seconds: number) {
+    return this.rpc<number>("add_voice_seconds", { p_user: userId, p_seconds: Math.round(seconds) }).then(Number);
   }
 }
 

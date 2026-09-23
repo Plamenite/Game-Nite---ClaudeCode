@@ -98,6 +98,18 @@ describe("MemoryLedger (development ledger with the database's rules)", () => {
     assert.deepStrictEqual((await l.friendPairs("a")).friends.map((f) => f.name), ["Sara"]);
   });
 
+  it("voice minutes add up per day", async () => {
+    let now = Date.parse("2026-09-23T10:00:00Z");
+    const l = new MemoryLedger(() => new Date(now));
+    assert.strictEqual(await l.voiceSecondsToday("u1"), 0);
+    assert.strictEqual(await l.addVoiceSeconds("u1", 90), 90);
+    assert.strictEqual(await l.addVoiceSeconds("u1", 30.4), 120);
+    assert.strictEqual(await l.voiceSecondsToday("u2"), 0);
+    await rejects(l.addVoiceSeconds("u1", -1), /negative/);
+    now += 24 * 60 * 60 * 1000;
+    assert.strictEqual(await l.voiceSecondsToday("u1"), 0, "a new day starts fresh");
+  });
+
   it("ledgerFromEnv: memory in development, Supabase when configured, refuses production without it", () => {
     assert.ok(ledgerFromEnv({}) instanceof MemoryLedger);
     assert.throws(() => ledgerFromEnv({ NODE_ENV: "production" }), /required in production/);
