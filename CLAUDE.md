@@ -88,11 +88,11 @@
   kept on the phone), gate in `app/_layout.tsx`. Server `src/auth.ts` verifies
   JWTs + name from claims (guests only if ALLOW_GUEST_TOKENS); `GET/POST /me`. Friends:
   SQL `friendships`, `src/friends.ts`, `src/presence.ts`; voice `src/voice-provider.ts`.
-- Colyseus gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`. Room
-  tests share ONE booted server. `client.leave(code)` hits `onDrop` first: skip
+- Gotchas: `filterBy(['x'])` + join option `{ x }` matches `metadata.x`. Room tests
+  share ONE booted server. `client.leave(code)` hits `onDrop` first: skip
   `allowReconnection` for own codes. Shell: absolute paths. CJS packages (agora-token):
-  default import, never named (tests pass, real start-up crashes); CI boots the server.
-  Local secrets: `apps/server/.env.development.local`, loaded by `src/local-env.ts`.
+  default import only; CI boots the server. Local secrets: `.env.development.local`.
+  SQL: migrations append-only once applied; functions service-role only (lock_down).
 
 ## 7. Project conventions
 - Founder: Windows PC daily; MacBook Air for Xcode. Branch `claude/modest-gates-unuglw`.

@@ -133,10 +133,15 @@ All received on 2026-09-23 and recorded in the repo (public values only):
 
 Open https://supabase.com/dashboard, pick the project, then:
 
-1. **SQL Editor → New query.** Paste the whole file at
-   https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/supabase/migrations/20260922000001_economy.sql
-   and press Run. That creates profiles, the coin ledger, friends and voice
-   minutes with all the rules. Safe to run again later; it only adds.
+1. **SQL Editor → New query.** Run each file below, in this order: open
+   the link, select all the text (Ctrl+A), copy, paste into a new query,
+   press Run. Each is safe to run again later.
+   1. https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/supabase/migrations/20260922000001_economy.sql
+      (profiles, the coin ledger, friends, voice minutes, and all the rules)
+   2. https://raw.githubusercontent.com/Plamenite/Game-Nite---ClaudeCode/claude/modest-gates-unuglw/supabase/migrations/20260923000001_lock_down.sql
+      (locks every coin function to the game server; without it, anyone
+      with the app could call them directly and give themselves coins)
+   Later database changes arrive as new numbered files; run only the new ones.
 2. **Authentication → Sign In / Providers → Anonymous sign-ins: ON.**
    This is what "Continue as a guest" uses now.
 3. **Authentication → Sign In / Providers → Google: ON.** Client ID = the

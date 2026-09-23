@@ -1,5 +1,5 @@
 import assert from "assert";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
 /**
@@ -7,7 +7,7 @@ import { PGlite } from "@electric-sql/pglite";
  * stub of Supabase's auth schema, and proves every economy rule holds in
  * the database itself, not just in our TypeScript.
  */
-const MIGRATION = new URL("../../../supabase/migrations/20260922000001_economy.sql", import.meta.url);
+const MIGRATIONS = new URL("../../../supabase/migrations/", import.meta.url);
 
 const U1 = "11111111-1111-4111-8111-111111111111";
 const U2 = "22222222-2222-4222-8222-222222222222";
@@ -31,8 +31,18 @@ describe("economy SQL (embedded Postgres)", function () {
       create table auth.users (id uuid primary key);
       create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
       insert into auth.users (id) values ('${U1}'), ('${U2}');
+      -- Supabase's roles, and its default of letting app users call public functions.
+      create role anon nologin;
+      create role authenticated nologin;
+      create role service_role nologin;
+      grant usage on schema public to anon, authenticated, service_role;
+      alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+      alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
     `);
-    await db.exec(readFileSync(MIGRATION, "utf8"));
+    // Every migration, in order, the way Supabase applies them.
+    for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+      await db.exec(readFileSync(new URL(file, MIGRATIONS), "utf8"));
+    }
   });
 
   after(async () => db.close());
@@ -166,6 +176,31 @@ describe("economy SQL (embedded Postgres)", function () {
     assert.strictEqual(await today(U1), 120);
     assert.strictEqual(await today(U2), 0, "each player has their own count");
     await rejects(db.query("select public.add_voice_seconds($1, $2)", [U1, -5]), /negative/);
+  });
+
+  it("app users cannot call the coin functions or write tables directly; only the server can", async () => {
+    const asRole = async (role: string, sql: string, params: unknown[] = []) => {
+      await db.exec(`set role ${role}`);
+      try {
+        return await db.query(sql, params);
+      } finally {
+        await db.exec("reset role");
+      }
+    };
+    const moves = JSON.stringify([{ user_id: U2, amount: 1000000, kind: "table_reward" }]);
+    for (const role of ["anon", "authenticated"]) {
+      await rejects(asRole(role, "select public.settle_table($1, $2::jsonb)", ["mint", moves]), /permission denied/);
+      await rejects(asRole(role, "select public.claim_daily_bonus($1)", [U2]), /permission denied/);
+      await rejects(asRole(role, "select public.ensure_profile($1, $2, $3)", [U2, "x", true]), /permission denied/);
+      await rejects(asRole(role, "select public.request_friend($1, $2)", [U1, U2]), /permission denied/);
+      await rejects(asRole(role, "select public.get_balance($1)", [U2]), /permission denied/);
+      await rejects(asRole(role, "select * from public.player_cards"), /permission denied/);
+      await rejects(asRole(role, "insert into public.coin_ledger (user_id, amount, kind, idempotency_key) values ($1, 5, 'adjustment', 'x')", [U2]), /permission denied/);
+    }
+    // The server (service role) still works.
+    const before = await balance(U2);
+    await asRole("service_role", "select public.voice_seconds_today($1)", [U2]);
+    assert.strictEqual(await balance(U2), before, "a refused call changed nothing");
   });
 
   it("the ledger is append-only and balances never go below zero", async () => {

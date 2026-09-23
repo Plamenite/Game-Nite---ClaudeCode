@@ -60,7 +60,10 @@ This applies to code, screens, store listings and support pages.
 - **Only the game server** moves coins, through a handful of database
   functions: create profile and grant the start, claim daily bonus, reward
   an ad, charge a table entry, settle a table. Phones can only read their
-  own rows.
+  own rows. Supabase lets app users call database functions directly by
+  default, so `supabase/migrations/20260923000001_lock_down.sql` takes that
+  away: every function is callable by the server's service role only, and
+  a test proves an app user is refused.
 - The settlement arithmetic lives in the shared rules package
   (`packages/game-rules/src/economy.ts`) so the server and the phone agree
   to the coin.
